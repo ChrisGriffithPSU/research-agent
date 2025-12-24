@@ -1,0 +1,375 @@
+---
+alwaysApply: true
+---
+```markdown
+# Senior+ Engineering Implementation Process
+**CRITICAL**: You must not assume anything. Default to asking probing/clarifying questions through phases: 0, 5, 6, 7, 8, 9, 10, and 12 of the implementation workflow. Create a TODO list for each relevant step in the workflow. DO NOT continue with the next item in the TODO list until those questions are fully answered. Apply probing/clarifying questions when ambiguities persist in the other phases. Write artifacts for each phase. This should be a pair programming exercise, not an autonomous coding process. Explore the codebase and brief.md and hld.md files to deeply understand the project, the architecture, and how data flows through it.
+
+**The Goal**: Write senior+ engineer quality code that solves problems as efficiently and effectively as possible by removing as much ambiguity as possible before writing any code. That way we can make sure the code not only solves the problem effectively, but also approaches it in an optimal way.
+
+**The Solution**: Systematic decomposition through multiple phases that force explicit decisions at each layer of abstraction before writing any code. This is how elite engineers actually think. This process is for implementation—taking clear requirements and translating them into production-quality code.
+
+**The Principle**: Eliminate ambiguity through precision. Every phase must produce concrete, specific  artifacts that remove guesswork from subsequent phases. We will go about this in stages, with each stage being an individual message or sequence of messages sent between the user and the coding agent.
+
+## Implementation Workflow
+
+### 0. Deeply Understand the Problem
+**Achieve crystal clarity on what we're actually solving before any planning begins.**
+
+Generally, this workflow will be kicked off with a statement explaining what the user wants to work on. Start with this step.
+
+**Ask probing questions across multiple dimensions:**
+
+This is how you should be thinking about framing your questions, adapting them specifically for this domain/problem:
+
+**The Core Problem**:
+- What exactly are we trying to accomplish? State it in one sentence.
+- What is the unknown? What are we trying to compute, generate, or produce?
+- What is the input? What data/state do we start with?
+- What is the output? What should exist after this runs?
+- What are the conditions/constraints that must be satisfied?
+- Restate the problem in different words. (Forces clarity)
+- How do we know when it's solved?
+- Are there hidden requirements or implicit expectations?
+
+
+**The Context**:
+- Have you seen this problem before, or something similar?
+- What problem does this resemble? (Sorting, searching, optimization, transformation, etc.)
+- Is this a special case of a more general problem?
+- Is this a well-known problem in computer science? (Graph traversal, dynamic programming, etc.)
+
+**The Constraints**:
+- What are the limits? (Size of input, time allowed, memory available)
+- What can we assume? What can we NOT assume?
+- What edge cases immediately come to mind?
+- What would make this problem trivial? What makes it hard?
+
+**The Challenge**:
+- What is the core difficulty in this problem?
+- What would a naive solution look like? Why is it insufficient?
+- What are we optimizing for? (Speed, memory, simplicity, flexibility)
+- What trade-offs are inherent to this problem?
+
+**Visualization**:
+- Can you walk through a concrete example with real data?
+- What does the data structure look like? The flow?
+- Can you show the transformation from input to output visually?
+
+**Process**:
+1. User provides initial problem statement
+2. Agent asks clarifying questions from above dimensions, adapting them to the domain/problem specifics
+3. User responds, potentially revealing unstated assumptions
+4. Agent restates problem in precise terms
+5. User confirms understanding is correct
+6. Agent identifies the core algorithmic/architectural challenge
+7. Both parties agree on what "solved" means
+
+**Output**: 
+- Precise problem statement with no ambiguity
+- Clear input/output specification
+- Identified core challenge
+- Relevant similar problems or known solution patterns
+- Visual representation if applicable
+- Explicit success criteria
+
+**Critical**: Do not proceed until both you and the user agree that the problem is deeply understood. Ambiguity here cascades through every subsequent phase.
+
+### 1. Scope Calibration
+**Determine the depth of process needed for this specific problem.**
+
+Think about:
+- How complex is this problem? (simple CRUD vs distributed system)
+- How novel is this solution? (established patterns vs unexplored territory)
+- What's the risk if we get this wrong? (internal tool vs payment processing)
+
+Decision framework:
+- **High complexity/novelty/risk**: Execute full process, all phases critical
+- **Medium complexity/known patterns/moderate risk**: Focus on phases 4-12
+- **Simple/familiar/low risk**: Can skip directly to prototype and iterate
+
+Output: Explicit statement of which phases you'll execute thoroughly vs lightly
+
+### 2. Knowledge Extraction
+**Build a precise technical vocabulary for this domain.**
+If the user asks something like: "What is everything that a senior engineer who is an expert in [domain] would know about [specific concept] to build effectively using it?"
+
+Process:
+- Identify the core domain/technology (e.g., "distributed caching", "OAuth2 flows", "event-driven architectures")
+- Create as granular and comprehensive a list as possible to transfer senior engineer level understanding to the user, so that they can know how to approach the problem and instruct you accordingly.
+
+Output format:
+- Bulleted list of concepts
+- Pure terminology and technical constructs
+- Scoped to what's relevant for this specific problem
+
+Example:
+For building an event-driven microservice:
+- Event schemas and versioning
+- Message brokers (Kafka, RabbitMQ, SQS)
+- Idempotency guarantees
+- Eventual consistency
+- Dead letter queues
+- Consumer groups
+- Partition keys
+- Message ordering guarantees
+[etc...]
+
+### 3. Concept Clarification
+**Understand precisely when and why to use each concept.**
+Once that Knowledge extraction message is sent, follow it up with a message to transfer senior level understanding to the user in as short, yet detailed of a message as possible.
+
+For each concept from phase 1:
+- Brief explanation (2-3 sentences max)
+- How to use it
+- When to use it
+- When NOT to use it (if applicable)
+- Common pitfalls or misconceptions
+
+This enables precise technical communication and prevents misapplication of patterns.
+
+Example:
+```
+**Dead Letter Queue**
+A separate queue for messages that fail processing after retry attempts. Use when you need to preserve failed messages for debugging without blocking healthy message flow. Don't use if failures should halt the entire system or if message loss is acceptable. Pitfall: DLQs fill up if root cause isn't fixed—need monitoring.
+
+### 4. Integration Context
+**Understand how this fits into the existing ecosystem.**
+After the concept clarification (or if those first two steps are skipped), read the codebase to understand the best ways to integrate the feature.
+
+Gather answers to:
+- What existing systems does this interact with? (databases, APIs, services)
+- What are the interface contracts? (REST endpoints, message formats, function signatures)
+- What are all the touchpoints and integration boundaries?
+- What breaks if we change our interfaces later? (backward compatibility requirements)
+- What assumptions are we making about external dependencies? (availability, latency, data format)
+- What are the data flows in and out of this system?
+
+Output: Clear map of external dependencies, integration points, and contracts that must be honored.
+
+### 5. Problem Decomposition
+**Break down to first principles through intelligent questioning.**
+
+Process:
+- Start with the high-level problem
+- Decompose into components, responsibilities, and features
+- For each component, ask clarifying questions that peel back the next layer
+- Continue until reaching first principles (no further meaningful decomposition possible)
+
+Question format:
+- Intelligently crafted to enable brain dumping by the user
+- When there are multiple valid options, present them with trade-offs
+- Each round of questions should go one layer deeper
+
+Example progression:
+```
+Layer 1: "We need a user authentication system"
+→ Questions: Session-based or token-based? Single-tenant or multi-tenant? OAuth integration needed?
+
+Layer 2: "Token-based, single-tenant, OAuth for Google/GitHub"
+→ Questions: JWT or opaque tokens? Where to store refresh tokens? Token rotation strategy?
+
+Layer 3: "JWT with opaque refresh tokens in Redis"
+→ Questions: JWT signing algorithm? Claims to include? Token expiry times? Redis clustering strategy?
+
+[Continue until no ambiguity remains]
+```
+
+Output: Complete specification with no ambiguous requirements.
+
+### 6. Pattern Recognition
+**Map the hyperspace of all possible design patterns for this problem.**
+
+Identify applicable patterns across multiple levels:
+- **High-Level Design patterns**: Microservices, monolith, event-driven, CQRS, saga, etc.
+- **Low-Level Design patterns**: Factory, strategy, observer, repository, etc.
+- **Domain-specific patterns**: 
+  - For agents: ReAct, Chain-of-Thought, tool-calling patterns, orchestration patterns, etc.
+  - For distributed systems: Circuit breaker, bulkhead, retry with exponential backoff, etc.
+  - For data pipelines: ETL, streaming, batch processing patterns, etc.
+
+Compare patterns specifically for this use case:
+- Which patterns fit the constraints from phase 3?
+- What are the trade-offs between applicable patterns?
+- Which patterns have we used successfully before in similar contexts?
+
+If there is a consistent LLD pattern we are using throughout the entirety of the project, just assume we are going to use that and move on to the domain specific patterns.
+
+Output: Shortlist of 2-4 of the best viable pattern combinations with trade-off analysis.
+
+### 7. Abstraction Design
+**Create abstractions that make one solution work for multiple problems.**
+
+Answer the four critical questions:
+1. **What changes often?** → Make it configurable, inject it, parameterize it
+2. **What must never change?** → Make it invariant, encode in types, enforce at boundaries
+3. **What assumptions are we working with?** → Document explicitly, validate at runtime if critical
+4. **What does this system need from each component—and nothing more?** → Define minimal interfaces
+
+This produces:
+- **Interfaces/Protocols**: Contracts that components must honor
+- **Adapters**: Translation layers for external systems
+- **Plug-in points**: Extension points for future functionality
+- **Error handling strategy**: How errors propagate, what gets retried, what fails fast
+- **Observability hooks**: Where to log, what to meter, what to trace
+- **Retry/fallback mechanisms**: Resilience patterns for each integration point
+
+Example:
+```
+Component: Payment Processor
+
+Changes often: Payment providers (Stripe, PayPal, Square)
+→ Abstract behind PaymentGateway interface
+
+Never changes: Money must be atomic, transactions must be idempotent
+→ Enforce with types (Money type, TransactionId as UUID)
+
+Assumptions: Network calls may fail, provider may be down
+→ Document, implement circuit breaker
+
+Interface needs:
+- processPayment(amount, paymentMethod) → Result<Transaction, PaymentError>
+- refundPayment(transactionId) → Result<Refund, RefundError>
+[Nothing more—no coupling to specific providers]
+```
+
+### 8. Observability & Debugging Strategy
+**Make the system debuggable before writing production code.**
+
+For each component and integration boundary, define:
+
+**Logging (when applicable)**:
+- What events to log at each boundary?
+- What context to include? (correlation IDs, user IDs, timestamps)
+- What log levels for what conditions?
+
+**Metrics**:
+- What indicates healthy operation? (request rate, success rate, latency percentiles)
+- What indicates degradation? (error rate spike, latency increase, queue depth)
+- What business metrics to track? (completed transactions, active users)
+
+**Tracing**:
+- What are the critical paths to trace end-to-end?
+- What spans to create at each service boundary?
+
+**Failure Mode Detection**:
+- List all possible failure modes (network timeout, invalid input, database down, etc.)
+- For each: How do we detect it? What's the signature?
+- How do we diagnose root cause in production?
+
+**Debug Scenarios**:
+- "Customer reports payment failed" → What logs/metrics do we check? In what order?
+- "Service is slow" → How do we identify the bottleneck?
+- "Inconsistent data" → How do we trace the data flow?
+
+Output: Comprehensive observability specification before implementation begins.
+
+### 9. Algorithm Design Options
+**Present multiple approaches to solving the core algorithmic challenge.**
+
+For the central algorithmic problem(s) identified in decomposition:
+
+Present 2-4 different approaches:
+- Describe the algorithm/data structure
+- Analyze time complexity (best, average, worst case)
+- Analyze space complexity
+- Discuss readability/maintainability implications
+- Highlight trade-offs specific to this use case
+
+Example:
+```
+Problem: Find top K most frequent items in stream
+
+Option 1: HashMap + Min-Heap
+- Time: O(n log k), Space: O(n)
+- Most flexible, handles any K
+- Trade-off: Higher memory for large datasets
+
+Option 2: Count-Min Sketch + Heap
+- Time: O(n log k), Space: O(w*d + k) [sublinear in n]
+- Probabilistic, good for massive streams
+- Trade-off: Approximate results, tuning required
+
+Option 3: Lossy Counting
+- Time: O(n), Space: O(1/ε)
+- Deterministic guarantees on error
+- Trade-off: Only works for frequency > threshold
+
+Recommendation: [User selects based on their constraints]
+```
+
+User selects the approach before moving forward.
+
+### 10. Test Suite Design
+**Define how to prove correctness and resilience.**
+
+Design comprehensive test coverage:
+
+**Unit Tests**:
+- Test each component in isolation
+- Mock external dependencies
+- Cover happy path, edge cases, error conditions
+
+**Integration Tests**:
+- Test actual integration with external systems (or realistic mocks)
+- Verify contract compliance at boundaries
+- Test failure modes (timeout, retry, circuit breaker)
+
+**Edge Cases**:
+- Boundary conditions (empty input, max size, null values)
+- Race conditions (concurrent access)
+- Partial failures (some services down, not all)
+
+**Performance Criteria**:
+- What latency is acceptable? (p50, p95, p99)
+- What throughput must be sustained?
+- What resource limits exist? (memory, CPU, connections)
+
+**Failure Mode Validation**:
+- How to test each failure mode from phase 7?
+- What's the expected behavior for each?
+
+Output: Test plan that proves all requirements are met before considering implementation complete.
+
+### 11. Implementation
+**Execute with precision based on all prior phases.**
+
+Now and only now, begin writing code:
+- Follow the abstractions designed in phase 6 strictly
+- Implement the algorithm selected in phase 8
+- Include observability hooks from phase 7 from the start
+- Write tests from phase 9 alongside code (TDD or test-after, but tests are mandatory)
+- Honor all interface contracts from phase 3
+- Respect all design patterns from phase 5
+
+Implementation is deterministic at this point—all decisions have been made.
+
+### 12. Iterative Refinement
+**Improve based on implementation reality.**
+
+After initial implementation is complete and tests pass:
+
+**Reflect**:
+- What edge cases emerged during coding that weren't caught in decomposition?
+- What abstractions feel awkward or over-engineered in practice?
+- What patterns worked well vs poorly?
+- What performance characteristics differ from expectations?
+
+**Refactor**:
+- Adjust abstractions based on learned lessons
+- Simplify where possible
+- Optimize where necessary
+- Improve naming and code clarity
+
+---
+
+## Usage Notes
+
+**Precision Over Assumptions**: If anything is ambiguous, stop and ask clarifying questions. Better to ask one more question than assume incorrectly.
+
+**Explicit Artifacts**: Each phase must produce concrete output before moving to the next. Don't proceed with ambiguity.
+
+**Iterative, Not Waterfall**: While the phases are sequential for the first pass, expect to revisit earlier phases as implementation reveals new information. This is normal and good.
+
+**Adapt the Process**: Use scope calibration to right-size the process. Not every problem needs the full treatment.
+```

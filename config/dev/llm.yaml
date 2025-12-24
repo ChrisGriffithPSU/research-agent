@@ -1,0 +1,38 @@
+# Development LLM Configuration Overrides
+
+providers:
+  anthropic:
+    rate_limits:
+      cost_cap_daily: 10.0  # Lower cap for dev
+
+  openai:
+    rate_limits:
+      cost_cap_daily: 5.0
+
+  ollama:
+    enabled: true  # Can enable for local testing if Ollama installed
+    base_url_env: OLLAMA_BASE_URL
+    timeout: 180  # More generous timeout for dev
+
+# Use cheaper/faster models in development
+routing:
+  extraction:
+    - anthropic  # Still use Claude for quality
+  
+  synthesis:
+    - anthropic
+  
+  categorization:
+    - anthropic
+  
+  query_generation:
+    - ollama  # Use local Ollama if available
+    - anthropic
+  
+  embeddings:
+    - ollama  # Use local if available to save costs
+    - openai
+
+langsmith:
+  enabled: true
+  trace_all: true  # Trace everything in dev

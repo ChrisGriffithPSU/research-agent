@@ -1,0 +1,79 @@
+# LLM Provider Configuration
+
+providers:
+  # Anthropic (Claude) - High quality, production use
+  anthropic:
+    enabled: true
+    api_key_env: ANTHROPIC_API_KEY
+    models:
+      extraction: claude-sonnet-4
+      synthesis: claude-sonnet-4
+      categorization: claude-sonnet-4
+      query_generation: claude-haiku-3-5
+    rate_limits:
+      requests_per_minute: 50
+      cost_cap_daily: 50.0  # USD per day
+
+  # OpenAI - Embeddings and fallback
+  openai:
+    enabled: true
+    api_key_env: OPENAI_API_KEY
+    models:
+      embeddings: text-embedding-3-small
+      extraction_fallback: gpt-4-turbo
+      synthesis_fallback: gpt-4-turbo
+    rate_limits:
+      requests_per_minute: 500
+      cost_cap_daily: 10.0  # USD per day
+
+  # Ollama - Local/self-hosted (disabled by default until VM ready)
+  ollama:
+    enabled: false  # Set to true when VM is ready
+    base_url_env: OLLAMA_BASE_URL  # Default: http://localhost:11434
+    timeout: 120  # seconds (Ollama can be slower than cloud providers)
+    models:
+      extraction: llama3.1:70b
+      synthesis: llama3.1:70b
+      categorization: llama3.1:8b
+      query_generation: llama3.1:8b
+      embeddings: nomic-embed-text
+    rate_limits:
+      requests_per_minute: 10  # Conservative for self-hosted
+      cost_cap_daily: 0.0  # Free/self-hosted
+
+# Routing Strategy
+# Priority order for each task type (tries providers in order until success)
+routing:
+  extraction:
+    - anthropic
+    - ollama  # Fallback to Ollama if enabled
+  
+  synthesis:
+    - anthropic
+    - ollama
+  
+  categorization:
+    - anthropic
+    - ollama
+  
+  query_generation:
+    - ollama  # Prefer Ollama for cheap/fast tasks when available
+    - anthropic
+  
+  embeddings:
+    - openai
+    - ollama
+
+# LangSmith Integration (for tracing LLM calls)
+langsmith:
+  enabled: true
+  api_key_env: LANGSMITH_API_KEY
+  project: researcher-agent
+  trace_all: true
+
+# Retry Configuration
+retry:
+  max_attempts: 3
+  backoff_factor: 2  # Exponential backoff: 1s, 2s, 4s
+  retry_on_rate_limit: true
+  retry_on_server_error: true

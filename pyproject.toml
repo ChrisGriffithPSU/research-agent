@@ -1,0 +1,212 @@
+[project]
+name = "researcher-agent"
+version = "0.1.0"
+description = "Autonomous ML research assistant for quantitative trading research"
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" }
+]
+
+# Core dependencies (installed everywhere in dev, selectively in Docker)
+dependencies = [
+    # Web framework & ASGI server
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+
+    # Database & ORM
+    "sqlalchemy>=2.0.25",
+    "alembic>=1.13.0",
+    "psycopg2-binary>=2.9.9",
+    "pgvector>=0.2.4",
+
+    # Data validation
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+
+    # LLM clients
+    "anthropic>=0.8.0",
+    "openai>=1.7.0",
+    "ollama>=0.4.0",
+    "langsmith>=0.0.75",
+    "langgraph>=0.0.25",
+
+    # Message queue (RabbitMQ)
+    "pika>=1.3.2",
+    "aio-pika>=9.3.1",
+
+    # HTTP client
+    "httpx>=0.26.0",
+
+    # Utilities
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.1",
+    "tenacity>=8.2.3",
+    "jinja2>=3.1.2",
+    "aiofiles>=23.2.1",
+    "typer>=0.9.0",
+    "click>=8.1.7",
+    "rich>=13.7.0",
+
+    # Date/time handling
+    "python-dateutil>=2.8.2",
+
+    # Async utilities
+    "asyncio>=3.4.3",
+]
+
+[project.optional-dependencies]
+# Orchestration service (Airflow)
+airflow = [
+    "apache-airflow>=2.8.0",
+    "apache-airflow-providers-postgres>=5.10.0",
+    "apache-airflow-providers-http>=4.7.0",
+]
+
+# Dashboard service (Streamlit)
+dashboard = [
+    "streamlit>=1.30.0",
+    "plotly>=5.18.0",
+    "pandas>=2.1.0",
+]
+
+# Fetcher services (web scraping & API clients)
+fetchers = [
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "arxiv>=2.1.0",
+    "kaggle>=1.6.0",
+    "huggingface-hub>=0.20.0",
+]
+
+# All optional dependencies (for local development)
+all = [
+    "apache-airflow>=2.8.0",
+    "apache-airflow-providers-postgres>=5.10.0",
+    "apache-airflow-providers-http>=4.7.0",
+    "streamlit>=1.30.0",
+    "plotly>=5.18.0",
+    "pandas>=2.1.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+    "arxiv>=2.1.0",
+    "kaggle>=1.6.0",
+    "huggingface-hub>=0.20.0",
+]
+
+# Development dependencies
+dev = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "pytest-httpx>=0.30.0",
+    "faker>=22.0.0",
+    "ruff>=0.1.9",
+    "mypy>=1.8.0",
+    "black>=23.12.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/shared", "src/services", "src/cli"]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "ruff>=0.1.9",
+    "mypy>=1.8.0",
+]
+
+# Ruff configuration (linting & formatting)
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "DTZ", # flake8-datetimez
+    "ISC", # flake8-implicit-str-concat
+    "T20", # flake8-print
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # Allow unused imports in __init__.py
+"tests/*" = ["T20"]  # Allow print in tests
+
+# Black configuration (code formatting)
+[tool.black]
+line-length = 100
+target-version = ['py313']
+include = '\.pyi?$'
+
+# Pytest configuration
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--showlocals",
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+]
+
+# MyPy configuration (type checking)
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = [
+    "anthropic.*",
+    "openai.*",
+    "pika.*",
+    "aio_pika.*",
+    "streamlit.*",
+    "plotly.*",
+]
+ignore_missing_imports = true
+
+# Coverage configuration
+[tool.coverage.run]
+source = ["src"]
+omit = ["tests/*", "**/__init__.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]

@@ -1,0 +1,32 @@
+# Dockerfile for Worker Services
+# Used by: Fetchers, Deduplication, Extraction, Synthesis, Learning
+
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy dependency files
+COPY pyproject.toml ./
+COPY .python-version ./
+
+# Install uv
+RUN pip install --no-cache-dir uv
+
+# Install dependencies
+RUN uv pip install --system -r <(uv pip compile pyproject.toml)
+
+# Copy source code
+COPY src/ ./src/
+COPY config/ ./config/
+
+# Build argument for service path
+ARG SERVICE_PATH
+ENV SERVICE_PATH=${SERVICE_PATH}
+
+# Run worker (message queue consumer)
+CMD python -m ${SERVICE_PATH/\//.}.main

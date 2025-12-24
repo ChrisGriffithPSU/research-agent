@@ -1,0 +1,29 @@
+# Dockerfile for Apache Airflow
+
+FROM apache/airflow:2.8.0-python3.13
+
+USER root
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Copy dependency files
+COPY --chown=airflow:root pyproject.toml ./
+COPY --chown=airflow:root .python-version ./
+
+# Install uv
+RUN pip install --no-cache-dir uv
+
+# Install project dependencies (including airflow extras)
+RUN uv pip install --system -r <(uv pip compile pyproject.toml --extra airflow)
+
+# Copy source code
+COPY --chown=airflow:root src/ ./src/
+COPY --chown=airflow:root config/ ./config/
+
+# Airflow will use volumes for dags and plugins
+WORKDIR /opt/airflow

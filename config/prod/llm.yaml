@@ -1,0 +1,41 @@
+# Production LLM Configuration Overrides
+
+providers:
+  anthropic:
+    rate_limits:
+      cost_cap_daily: 100.0  # Higher cap for production
+
+  openai:
+    rate_limits:
+      cost_cap_daily: 20.0
+
+  ollama:
+    enabled: true  # Enable when VM is provisioned
+    base_url_env: OLLAMA_BASE_URL
+    timeout: 120
+
+# Production routing: prefer Ollama for cost savings when available
+routing:
+  extraction:
+    - anthropic  # High quality tasks still use Claude
+    - ollama
+  
+  synthesis:
+    - anthropic
+    - ollama
+  
+  categorization:
+    - ollama  # Medium quality OK, prefer free
+    - anthropic
+  
+  query_generation:
+    - ollama  # Always prefer free for cheap tasks
+    - anthropic
+  
+  embeddings:
+    - ollama  # Prefer free embeddings
+    - openai
+
+langsmith:
+  enabled: true
+  trace_all: false  # Only trace errors in production

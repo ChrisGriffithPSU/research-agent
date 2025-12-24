@@ -1,0 +1,144 @@
+# Development Overrides for docker-compose.yml
+#
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up
+
+version: '3.8'
+
+services:
+  # Expose PostgreSQL port for local dev tools
+  postgres:
+    ports:
+      - "5432:5432"
+
+  # Expose RabbitMQ management UI
+  rabbitmq:
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # Management UI
+
+  # API Gateway - expose for testing
+  api-gateway:
+    ports:
+      - "8001:8000"
+    volumes:
+      - ../../src/services/api_gateway:/app/src/services/api_gateway
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+
+  # LLM Router - expose for testing
+  llm-router:
+    ports:
+      - "8002:8000"
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/llm_router:/app/src/services/llm_router
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+
+  # Digest Generation - expose for manual triggers
+  digest-generation:
+    ports:
+      - "8003:8000"
+    volumes:
+      - ../../src/services/digest_generation:/app/src/services/digest_generation
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+
+  # Search API - expose for testing
+  search:
+    ports:
+      - "8004:8000"
+    volumes:
+      - ../../src/services/search:/app/src/services/search
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+
+  # Feedback API - expose for testing
+  feedback:
+    ports:
+      - "8005:8000"
+    volumes:
+      - ../../src/services/feedback:/app/src/services/feedback
+    environment:
+      - DEBUG=true
+      - LOG_LEVEL=DEBUG
+
+  # Dashboard - hot reload enabled
+  dashboard:
+    ports:
+      - "8501:8501"
+    volumes:
+      - ../../src/services/dashboard:/app/src/services/dashboard
+    command: streamlit run src/services/dashboard/app.py --server.fileWatcherType poll
+
+  # Airflow - expose webserver
+  airflow:
+    ports:
+      - "8080:8080"
+    volumes:
+      - ../airflow/dags:/opt/airflow/dags
+      - ../airflow/plugins:/opt/airflow/plugins
+    environment:
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__WEBSERVER__EXPOSE_CONFIG=True
+
+  # Worker services - mount code for hot reload during development
+  arxiv-fetcher:
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/fetchers/arxiv:/app/src/services/fetchers/arxiv
+    environment:
+      - LOG_LEVEL=DEBUG
+
+  kaggle-fetcher:
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/fetchers/kaggle:/app/src/services/fetchers/kaggle
+    environment:
+      - LOG_LEVEL=DEBUG
+
+  huggingface-fetcher:
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/fetchers/huggingface:/app/src/services/fetchers/huggingface
+    environment:
+      - LOG_LEVEL=DEBUG
+
+  web-search-fetcher:
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/fetchers/web_search:/app/src/services/fetchers/web_search
+    environment:
+      - LOG_LEVEL=DEBUG
+
+  deduplication:
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/deduplication:/app/src/services/deduplication
+    environment:
+      - LOG_LEVEL=DEBUG
+
+  extraction:
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/extraction:/app/src/services/extraction
+    environment:
+      - LOG_LEVEL=DEBUG
+
+  synthesis:
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/synthesis:/app/src/services/synthesis
+    environment:
+      - LOG_LEVEL=DEBUG
+
+  learning:
+    volumes:
+      - ../../src/shared:/app/src/shared
+      - ../../src/services/learning:/app/src/services/learning
+    environment:
+      - LOG_LEVEL=DEBUG
