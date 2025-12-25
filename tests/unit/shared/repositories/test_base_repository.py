@@ -1,8 +1,15 @@
-"""Tests for BaseRepository CRUD operations."""
+"""Tests for BaseRepository CRUD operations.
+
+These tests require PostgreSQL as UserProfile uses JSONB and other
+PostgreSQL-specific features.
+"""
 import pytest
 
 from src.shared.models.user import UserProfile
 from src.shared.repositories.base import BaseRepository
+
+# Mark all tests in this module as integration tests requiring PostgreSQL
+pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio

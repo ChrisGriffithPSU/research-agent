@@ -28,4 +28,5 @@ def pytest_runtest_setup(item):
 # Import fixtures from fixtures module to make them available globally
 pytest_plugins = [
     "tests.fixtures.docker",
+    "tests.fixtures.db",
 ]

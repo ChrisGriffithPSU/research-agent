@@ -16,19 +16,22 @@ from src.shared.messaging.exceptions import TemporaryError, PermanentError
 from src.shared.models.source import SourceType
 from src.shared.messaging.queue_setup import QueueSetup
 from src.shared.messaging.metrics import get_metrics, reset_metrics
+from src.shared.messaging.config import MessagingConfig
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_consumer_receives_and_processes_message(rabbitmq_manager):
     """Test consumer receives and processes messages from RabbitMQ."""
-    # Connect and setup
-    conn = RabbitMQConnection(
+    # Create config from manager
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    # Connect and setup
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -88,12 +91,13 @@ async def test_consumer_receives_and_processes_message(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_consumer_requeues_on_transient_error(rabbitmq_manager):
     """Test consumer requeues messages on transient errors."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -158,12 +162,13 @@ async def test_consumer_requeues_on_transient_error(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_consumer_sends_to_dlq_on_permanent_error(rabbitmq_manager):
     """Test consumer sends malformed messages to DLQ."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -214,12 +219,13 @@ async def test_consumer_sends_to_dlq_on_permanent_error(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_consumer_handles_multiple_queues(rabbitmq_manager):
     """Test consumer can subscribe to multiple queues."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -293,12 +299,13 @@ async def test_consumer_handles_multiple_queues(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_consumer_prefetch_count(rabbitmq_manager):
     """Test consumer respects prefetch count."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -351,12 +358,13 @@ async def test_consumer_prefetch_count(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_consumer_graceful_shutdown(rabbitmq_manager):
     """Test consumer shuts down gracefully."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -409,12 +417,13 @@ async def test_consumer_graceful_shutdown(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_consumer_health_check(rabbitmq_manager):
     """Test consumer health check returns correct status."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()

@@ -100,6 +100,22 @@ async def rabbitmq_manager():
     # No cleanup needed - containers are managed externally
 
 
+@pytest.fixture(scope="function")
+def rabbitmq_config(rabbitmq_manager):
+    """Create MessagingConfig from rabbitmq_manager.
+
+    Provides a fresh config for each test function.
+    """
+    from src.shared.messaging.config import MessagingConfig
+
+    return MessagingConfig(
+        host=rabbitmq_manager.host,
+        port=rabbitmq_manager.port,
+        user=rabbitmq_manager.user,
+        password=rabbitmq_manager.password,
+    )
+
+
 @pytest.fixture(scope="session")
 async def postgres_manager():
     """Provide PostgreSQL test manager.

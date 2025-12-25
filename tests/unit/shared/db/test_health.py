@@ -1,7 +1,13 @@
-"""Tests for database health check functionality."""
+"""Tests for database health check functionality.
+
+These tests require PostgreSQL as they use models with ARRAY types.
+"""
 import pytest
 
 from src.shared.db.health import check_health, quick_check
+
+# Mark database health tests as integration tests (they create tables with PostgreSQL types)
+pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio

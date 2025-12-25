@@ -50,9 +50,9 @@ class QueueSetup:
         """Declare topic exchange."""
         channel = self._connection.channel
         try:
-            await channel.exchange_declare(
-                exchange=EXCHANGE_NAME,
-                exchange_type="topic",  # Topic exchange for flexible routing
+            await channel.declare_exchange(
+                name=EXCHANGE_NAME,
+                type="topic",  # Topic exchange for flexible routing
                 durable=True,  # Persist across RabbitMQ restarts
             )
             logger.info(f"Declared topic exchange: {EXCHANGE_NAME}")
@@ -64,9 +64,9 @@ class QueueSetup:
         """Declare dead letter exchange."""
         channel = self._connection.channel
         try:
-            await channel.exchange_declare(
-                exchange=DLQ_EXCHANGE_NAME,
-                exchange_type="direct",
+            await channel.declare_exchange(
+                name=DLQ_EXCHANGE_NAME,
+                type="direct",
                 durable=True,
             )
             logger.info(f"Declared DLQ exchange: {DLQ_EXCHANGE_NAME}")
@@ -183,8 +183,8 @@ class QueueSetup:
             arguments["x-overflow"] = "drop-head"  # Drop oldest when full
 
         try:
-            await channel.queue_declare(
-                queue=queue_name.value,
+            await channel.declare_queue(
+                name=queue_name.value,
                 durable=True,  # Persist across RabbitMQ restarts
                 arguments=arguments,
             )

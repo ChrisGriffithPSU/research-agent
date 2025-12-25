@@ -16,6 +16,7 @@ from src.shared.messaging.exceptions import CircuitBreakerOpenError, PublishErro
 from src.shared.models.source import SourceType
 from src.shared.messaging.queue_setup import QueueSetup
 from src.shared.messaging.metrics import get_metrics, reset_metrics
+from src.shared.messaging.config import MessagingConfig
 
 
 @pytest.mark.integration
@@ -25,12 +26,13 @@ async def test_publisher_sends_message_to_queue(rabbitmq_manager):
     from tests.fixtures.docker import RabbitMQTestManager
 
     # Connect to RabbitMQ
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
 
     # Setup queues
@@ -69,12 +71,13 @@ async def test_publisher_retry_on_transient_failure(rabbitmq_manager):
     """Test that publisher retries on transient failures."""
     from tests.fixtures.docker import RabbitMQTestManager
 
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -112,12 +115,13 @@ async def test_publisher_circuit_breaker_opens_on_failures(rabbitmq_manager):
     """Test that circuit breaker opens after consecutive failures."""
     from tests.fixtures.docker import RabbitMQTestManager
 
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -176,12 +180,13 @@ async def test_publisher_respects_circuit_breaker(rabbitmq_manager):
     """Test that publisher respects open circuit breaker."""
     from tests.fixtures.docker import RabbitMQTestManager
 
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -216,12 +221,13 @@ async def test_publisher_resets_after_recovery(rabbitmq_manager):
     """Test that circuit breaker can be manually reset."""
     from tests.fixtures.docker import RabbitMQTestManager
 
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -253,12 +259,13 @@ async def test_publisher_health_check(rabbitmq_manager):
     """Test publisher health check returns correct status."""
     from tests.fixtures.docker import RabbitMQTestManager
 
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
 
     publisher = MessagePublisher(conn)
@@ -286,12 +293,13 @@ async def test_publisher_serializes_messages_correctly(rabbitmq_manager):
     """Test that messages are serialized to JSON correctly."""
     from tests.fixtures.docker import RabbitMQTestManager
 
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()

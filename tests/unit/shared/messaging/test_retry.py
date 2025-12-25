@@ -151,14 +151,15 @@ async def test_no_retry_strategy_never_retries():
     assert strategy.get_backoff(10) == 0.0
 
 
-def test_retry_strategy_interface():
+@pytest.mark.asyncio
+async def test_retry_strategy_interface():
     """ExponentialBackoffStrategy implements IRetryStrategy."""
     strategy = ExponentialBackoffStrategy()
     assert isinstance(strategy, IRetryStrategy)
 
     # Can call abstract methods
-    asyncio.get_event_loop().run_until_complete(
-        strategy.should_retry(0, Exception("test"))
-    )
+    result = await strategy.should_retry(0, Exception("test"))
+    assert isinstance(result, bool)
+
     backoff = strategy.get_backoff(0)
     assert backoff >= 0

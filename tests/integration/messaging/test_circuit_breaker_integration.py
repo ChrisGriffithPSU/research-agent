@@ -15,18 +15,20 @@ from src.shared.models.source import SourceType
 from src.shared.messaging.queue_setup import QueueSetup
 from src.shared.messaging.exceptions import CircuitBreakerOpenError
 from src.shared.messaging.metrics import get_metrics, reset_metrics
+from src.shared.messaging.config import MessagingConfig
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_circuit_breaker_opens_on_real_failures(rabbitmq_manager):
     """Test that circuit breaker opens after real RabbitMQ publish failures."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -64,12 +66,13 @@ async def test_circuit_breaker_opens_on_real_failures(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_circuit_breaker_moves_to_half_open(rabbitmq_manager):
     """Test that circuit breaker moves to half-open after timeout."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
 
     # Create circuit breaker with short timeout
@@ -103,12 +106,13 @@ async def test_circuit_breaker_moves_to_half_open(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_circuit_breaker_closes_on_half_open_success(rabbitmq_manager):
     """Test that circuit breaker closes after successful call in half-open."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
 
     # Create circuit breaker
@@ -146,12 +150,13 @@ async def test_circuit_breaker_closes_on_half_open_success(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_circuit_breaker_with_real_rabbitmq_failures(rabbitmq_manager):
     """Test circuit breaker protecting actual RabbitMQ publisher."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
     queue_setup = QueueSetup(conn)
     await queue_setup.setup_all_queues()
@@ -202,12 +207,13 @@ async def test_circuit_breaker_with_real_rabbitmq_failures(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_circuit_breaker_manual_reset(rabbitmq_manager):
     """Test manual reset of circuit breaker."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
 
     # Create circuit breaker
@@ -246,12 +252,13 @@ async def test_circuit_breaker_manual_reset(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_circuit_breaker_handles_mixed_success_failures(rabbitmq_manager):
     """Test circuit breaker with mix of successes and failures."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
 
     breaker = CircuitBreaker(failure_threshold=3, timeout=60.0)
@@ -301,12 +308,13 @@ async def test_circuit_breaker_handles_mixed_success_failures(rabbitmq_manager):
 @pytest.mark.asyncio
 async def test_circuit_breaker_properties_in_real_scenario(rabbitmq_manager):
     """Test circuit breaker properties during real usage."""
-    conn = RabbitMQConnection(
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+    conn = RabbitMQConnection(config)
     await conn.connect()
 
     breaker = CircuitBreaker(failure_threshold=5, timeout=30.0)

@@ -161,8 +161,8 @@ class RabbitMQConnection:
         """
         try:
             channel = self.channel
-            queue_info = await channel.queue_declare(
-                queue=queue_name,
+            queue_info = await channel.declare_queue(
+                name=queue_name,
                 passive=True,  # Don't create, just check
             )
             return {
