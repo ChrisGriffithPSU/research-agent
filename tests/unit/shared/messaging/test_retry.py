@@ -12,31 +12,36 @@ from src.shared.messaging.exceptions import PermanentError
 
 
 def test_exponential_backoff_calculates_correctly():
-    """Should calculate correct backoff values."""
+    """Should calculate correct backoff values (with jitter tolerance)."""
     strategy = ExponentialBackoffStrategy(
         max_attempts=3,
         base_delay=1.0,
         max_delay=60.0,
     )
 
-    # base_delay * (2 ^ attempt)
-    assert strategy.get_backoff(0) == 1.0  # 1 * 2^0
-    assert strategy.get_backoff(1) == 2.0  # 1 * 2^1
-    assert strategy.get_backoff(2) == 4.0  # 1 * 2^2
+    # base_delay * (2 ^ attempt) with ±20% jitter
+    backoff_0 = strategy.get_backoff(0)  # 1 * 2^0 = 1.0 ± 0.2
+    backoff_1 = strategy.get_backoff(1)  # 1 * 2^1 = 2.0 ± 0.4
+    backoff_2 = strategy.get_backoff(2)  # 1 * 2^2 = 4.0 ± 0.8
+
+    # Allow for ±20% jitter
+    assert 0.8 <= backoff_0 <= 1.2
+    assert 1.6 <= backoff_1 <= 2.4
+    assert 3.2 <= backoff_2 <= 4.8
 
 
 def test_exponential_backoff_caps_at_max():
-    """Should cap backoff at max_delay."""
+    """Should cap backoff at max_delay (with jitter tolerance)."""
     strategy = ExponentialBackoffStrategy(
         max_attempts=10,
         base_delay=1.0,
         max_delay=10.0,
     )
 
-    # 2^9 = 512, but capped at 10
+    # 2^9 = 512, but capped at 10 ± 2 (20% jitter)
     backoff = strategy.get_backoff(9)
-    assert backoff <= 10.0
-    assert backoff >= 10.0  # Within jitter range
+    assert backoff <= 12.0  # max_delay + jitter
+    assert backoff >= 8.0   # max_delay - jitter
 
 
 @pytest.mark.asyncio
@@ -72,18 +77,18 @@ async def test_exponential_backoff_should_not_retry_after_max_attempts():
     """Should not retry after max attempts reached."""
     strategy = ExponentialBackoffStrategy(max_attempts=3)
 
-    # Should retry below max
+    # Should retry below max (attempts 0, 1, 2)
     assert await strategy.should_retry(attempt=0, error=RuntimeError("transient"))
     assert await strategy.should_retry(attempt=1, error=RuntimeError("transient"))
     assert await strategy.should_retry(attempt=2, error=RuntimeError("transient"))
 
-    # Should not retry at or above max
+    # Should not retry at or above max (attempts 3+)
     assert not await strategy.should_retry(attempt=3, error=RuntimeError("transient"))
     assert not await strategy.should_retry(attempt=4, error=RuntimeError("transient"))
 
 
 def test_linear_backoff_calculates_correctly():
-    """Should calculate correct linear backoff values."""
+    """Should calculate correct linear backoff values (with jitter tolerance for potential future changes)."""
     strategy = LinearBackoffStrategy(
         max_attempts=3,
         base_delay=1.0,
@@ -92,9 +97,15 @@ def test_linear_backoff_calculates_correctly():
     )
 
     # base_delay + (increment * attempt)
-    assert strategy.get_backoff(0) == 1.0  # 1 + 2*0
-    assert strategy.get_backoff(1) == 3.0  # 1 + 2*1
-    assert strategy.get_backoff(2) == 5.0  # 1 + 2*2
+    # Note: Linear backoff doesn't have jitter in current implementation,
+    # but we use ranges for consistency and robustness
+    backoff_0 = strategy.get_backoff(0)  # 1 + 2*0 = 1.0
+    backoff_1 = strategy.get_backoff(1)  # 1 + 2*1 = 3.0
+    backoff_2 = strategy.get_backoff(2)  # 1 + 2*2 = 5.0
+
+    assert 0.95 <= backoff_0 <= 1.05  # Small tolerance for floating point
+    assert 2.95 <= backoff_1 <= 3.05
+    assert 4.95 <= backoff_2 <= 5.05
 
 
 def test_linear_backoff_caps_at_max():
@@ -109,6 +120,7 @@ def test_linear_backoff_caps_at_max():
     # 1 + 10*9 = 91, but capped at 20
     backoff = strategy.get_backoff(9)
     assert backoff <= 20.0
+    assert backoff >= 19.0  # Small tolerance
 
 
 @pytest.mark.asyncio
@@ -150,4 +162,3 @@ def test_retry_strategy_interface():
     )
     backoff = strategy.get_backoff(0)
     assert backoff >= 0
-

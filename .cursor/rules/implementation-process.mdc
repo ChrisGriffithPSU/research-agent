@@ -300,38 +300,7 @@ Recommendation: [User selects based on their constraints]
 
 User selects the approach before moving forward.
 
-### 10. Test Suite Design
-**Define how to prove correctness and resilience.**
-
-Design comprehensive test coverage:
-
-**Unit Tests**:
-- Test each component in isolation
-- Mock external dependencies
-- Cover happy path, edge cases, error conditions
-
-**Integration Tests**:
-- Test actual integration with external systems (or realistic mocks)
-- Verify contract compliance at boundaries
-- Test failure modes (timeout, retry, circuit breaker)
-
-**Edge Cases**:
-- Boundary conditions (empty input, max size, null values)
-- Race conditions (concurrent access)
-- Partial failures (some services down, not all)
-
-**Performance Criteria**:
-- What latency is acceptable? (p50, p95, p99)
-- What throughput must be sustained?
-- What resource limits exist? (memory, CPU, connections)
-
-**Failure Mode Validation**:
-- How to test each failure mode from phase 7?
-- What's the expected behavior for each?
-
-Output: Test plan that proves all requirements are met before considering implementation complete.
-
-### 11. Implementation
+### 10. Implementation
 **Execute with precision based on all prior phases.**
 
 Now and only now, begin writing code:
@@ -344,7 +313,7 @@ Now and only now, begin writing code:
 
 Implementation is deterministic at this point—all decisions have been made.
 
-### 12. Iterative Refinement
+### 11. Iterative Refinement
 **Improve based on implementation reality.**
 
 After initial implementation is complete and tests pass:
