@@ -3,7 +3,7 @@ import logging
 import time
 import threading
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
 
 logger = logging.getLogger(__name__)

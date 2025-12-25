@@ -64,7 +64,7 @@ def create_source(
     url: str = "https://arxiv.org/abs/1234.5678",
     title: str = "Test Paper",
     content: str = "Test content",
-    metadata: dict = None,
+    source_metadata: dict = None,
     embedding: List[float] = None,
     status: ProcessingStatus = ProcessingStatus.FETCHED,
     extracted_data: dict = None,
@@ -77,7 +77,7 @@ def create_source(
         url: Source URL
         title: Source title
         content: Source content text
-        metadata: Source metadata dict
+        source_metadata: Source metadata dict
         embedding: Vector embedding (1536 dimensions)
         status: Processing status
         extracted_data: Extracted data from LLM
@@ -85,8 +85,8 @@ def create_source(
     Returns:
         Source instance
     """
-    if metadata is None:
-        metadata = {"authors": ["Test Author"], "published_date": "2024-01-01"}
+    if source_metadata is None:
+        source_metadata = {"authors": ["Test Author"], "published_date": "2024-01-01"}
 
     return Source(
         id=id,
@@ -94,7 +94,7 @@ def create_source(
         url=url,
         title=title,
         content=content,
-        metadata=metadata,
+        source_metadata=source_metadata,
         embedding=embedding,
         status=status,
         extracted_data=extracted_data,

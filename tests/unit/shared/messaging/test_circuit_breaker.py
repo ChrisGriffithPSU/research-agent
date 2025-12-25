@@ -52,8 +52,11 @@ def test_circuit_breaker_rejects_when_open():
     assert breaker.is_open
 
     # Should raise error
+    async def fail_func():
+        raise RuntimeError("test")
+
     with pytest.raises(CircuitBreakerOpenError, match="Circuit breaker is open"):
-        asyncio.run(breaker.call(async def: raise RuntimeError("test")))
+        asyncio.run(breaker.call(fail_func))
 
 
 def test_circuit_breaker_calls_function_when_closed():

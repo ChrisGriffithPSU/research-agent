@@ -57,7 +57,7 @@ class Source(Base, TimestampMixin):
 
     # Additional metadata (source-specific fields)
     # Example: {"authors": [...], "published_date": "2024-01-01", "citations": 42}
-    metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    source_metadata: Mapped[dict] = mapped_column("metadata", JSON, nullable=False, default=dict)
 
     # Vector embedding (1536 dimensions for OpenAI text-embedding-3-small)
     embedding: Mapped[Optional[list]] = mapped_column(

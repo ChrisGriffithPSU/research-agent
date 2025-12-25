@@ -7,7 +7,6 @@ from src.shared.repositories.base import (
     BaseRepository,
     DatabaseError,
     VectorSearchMixin,
-    _cosine_distance,
 )
 from src.shared.repositories.digest_repository import (
     DigestItemRepository,
