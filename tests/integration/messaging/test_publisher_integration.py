@@ -34,7 +34,8 @@ async def test_publisher_sends_message_to_queue(rabbitmq_manager):
     await conn.connect()
 
     # Setup queues
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     # Create publisher
     publisher = MessagePublisher(
@@ -75,7 +76,8 @@ async def test_publisher_retry_on_transient_failure(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     # Create publisher with fast retry
     publisher = MessagePublisher(
@@ -117,7 +119,8 @@ async def test_publisher_circuit_breaker_opens_on_failures(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     # Create publisher with circuit breaker
     # We'll simulate failures by mocking the publish operation
@@ -180,7 +183,8 @@ async def test_publisher_respects_circuit_breaker(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     publisher = MessagePublisher(
         conn,
@@ -219,7 +223,8 @@ async def test_publisher_resets_after_recovery(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     publisher = MessagePublisher(
         conn,
@@ -288,7 +293,8 @@ async def test_publisher_serializes_messages_correctly(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     publisher = MessagePublisher(conn)
 

@@ -12,7 +12,7 @@ from src.shared.messaging.publisher import MessagePublisher
 from src.shared.messaging.circuit_breaker import CircuitBreaker
 from src.shared.messaging.schemas import SourceMessage, QueueName
 from src.shared.models.source import SourceType
-from src.shared.messaging.queue_setup import setup_queues
+from src.shared.messaging.queue_setup import QueueSetup
 from src.shared.messaging.exceptions import CircuitBreakerOpenError
 from src.shared.messaging.metrics import get_metrics, reset_metrics
 
@@ -28,7 +28,8 @@ async def test_circuit_breaker_opens_on_real_failures(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     # Create circuit breaker
     breaker = CircuitBreaker(failure_threshold=3, timeout=0.2)
@@ -152,7 +153,8 @@ async def test_circuit_breaker_with_real_rabbitmq_failures(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     # Create publisher with circuit breaker
     publisher = MessagePublisher(

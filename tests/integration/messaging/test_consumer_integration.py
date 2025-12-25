@@ -14,7 +14,7 @@ from src.shared.messaging.retry import ExponentialBackoffStrategy
 from src.shared.messaging.schemas import QueueName, SourceMessage, ExtractedInsightsMessage
 from src.shared.messaging.exceptions import TemporaryError, PermanentError
 from src.shared.models.source import SourceType
-from src.shared.messaging.queue_setup import setup_queues
+from src.shared.messaging.queue_setup import QueueSetup
 from src.shared.messaging.metrics import get_metrics, reset_metrics
 
 
@@ -30,7 +30,8 @@ async def test_consumer_receives_and_processes_message(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     # Track received messages
     received_messages = []
@@ -94,7 +95,8 @@ async def test_consumer_requeues_on_transient_error(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     attempt_count = 0
     processing_complete = asyncio.Event()
@@ -163,7 +165,8 @@ async def test_consumer_sends_to_dlq_on_permanent_error(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     processing_complete = asyncio.Event()
 
@@ -218,7 +221,8 @@ async def test_consumer_handles_multiple_queues(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     received_sources = []
     received_insights = []
@@ -296,7 +300,8 @@ async def test_consumer_prefetch_count(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     processed_count = 0
     all_messages_published = asyncio.Event()
@@ -353,7 +358,8 @@ async def test_consumer_graceful_shutdown(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     processed_messages = []
 
@@ -410,7 +416,8 @@ async def test_consumer_health_check(rabbitmq_manager):
         password=rabbitmq_manager.password,
     )
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     consumer = MessageConsumer(conn)
 

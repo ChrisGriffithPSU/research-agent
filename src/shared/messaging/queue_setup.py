@@ -49,7 +49,6 @@ class QueueSetup:
     async def _declare_exchange(self) -> None:
         """Declare topic exchange."""
         channel = self._connection.channel
-
         try:
             await channel.exchange_declare(
                 exchange=EXCHANGE_NAME,
@@ -64,7 +63,6 @@ class QueueSetup:
     async def _declare_dlq_exchange(self) -> None:
         """Declare dead letter exchange."""
         channel = self._connection.channel
-
         try:
             await channel.exchange_declare(
                 exchange=DLQ_EXCHANGE_NAME,

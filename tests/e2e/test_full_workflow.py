@@ -15,8 +15,9 @@ from src.shared.messaging.publisher import MessagePublisher
 from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.schemas import QueueName, SourceMessage, ExtractedInsightsMessage, DigestReadyMessage
 from src.shared.models.source import SourceType, ProcessingStatus
-from src.shared.messaging.queue_setup import setup_queues
+from src.shared.messaging.queue_setup import QueueSetup
 from src.shared.messaging.metrics import get_metrics, reset_metrics
+from src.shared.messaging.config import MessagingConfig
 
 
 @pytest.mark.e2e
@@ -33,15 +34,19 @@ async def test_full_content_discovery_pipeline(rabbitmq_manager):
     Note: This test assumes services are running. In a full implementation,
     you would mock or integrate with actual service logic.
     """
-    # Connect to RabbitMQ
-    conn = RabbitMQConnection(
+    # Create proper config object
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+
+    # Connect to RabbitMQ
+    conn = RabbitMQConnection(config)
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     # Track messages at each stage
     stage1_discovered = []
@@ -184,14 +189,20 @@ async def test_error_handling_across_pipeline(rabbitmq_manager):
     3. Circuit breaker protects against cascading failures
     4. Metrics track all errors
     """
-    conn = RabbitMQConnection(
+    from src.shared.messaging.exceptions import PermanentError
+
+    # Create proper config object
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+
+    conn = RabbitMQConnection(config)
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     error_count = 0
     dlq_messages = []
@@ -200,8 +211,6 @@ async def test_error_handling_across_pipeline(rabbitmq_manager):
     async def failing_handler(message: SourceMessage):
         nonlocal error_count
         error_count += 1
-
-        from src.shared.messaging.exceptions import PermanentError
 
         # Fail consistently to test DLQ
         raise PermanentError(f"Simulated permanent error {error_count}")
@@ -257,14 +266,18 @@ async def test_duplicate_prevention_in_pipeline(rabbitmq_manager):
     1. Same content published twice is deduplicated
     2. Downstream services don't process duplicates
     """
-    conn = RabbitMQConnection(
+    # Create proper config object
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+
+    conn = RabbitMQConnection(config)
     await conn.connect()
-    await setup_queues(conn.channel)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     processed_messages = []
     pipeline_complete = asyncio.Event()
@@ -331,13 +344,20 @@ async def test_system_health_check_workflow(rabbitmq_manager):
     """
     from src.shared.messaging.health import check_messaging_health, quick_check
 
-    conn = RabbitMQConnection(
+    # Create proper config object
+    config = MessagingConfig(
         host=rabbitmq_manager.host,
         port=rabbitmq_manager.port,
         user=rabbitmq_manager.user,
         password=rabbitmq_manager.password,
     )
+
+    conn = RabbitMQConnection(config)
     await conn.connect()
+
+    # Set up queues before health check (needed for queue depth checks)
+    queue_setup = QueueSetup(conn)
+    await queue_setup.setup_all_queues()
 
     # Quick check
     is_healthy = await quick_check(conn)
@@ -362,4 +382,3 @@ async def test_system_health_check_workflow(rabbitmq_manager):
 
     # Cleanup
     await conn.close()
-
