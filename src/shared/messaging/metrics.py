@@ -207,16 +207,33 @@ class MessagingMetrics:
             Dict with all metrics (counters, gauges, timers, errors)
         """
         with self._lock:
-            # Timer stats
+            # Timer stats - calculate inline to avoid nested lock acquisition
             timer_stats = {}
-            for metric_name in self._timers.keys():
-                timer_stats[metric_name] = self.get_timer_stats(metric_name)
+            for metric_name, values in self._timers.items():
+                if not values:
+                    timer_stats[metric_name] = {"count": 0}
+                else:
+                    timer_stats[metric_name] = {
+                        "count": len(values),
+                        "min": min(values),
+                        "max": max(values),
+                        "avg": sum(values) / len(values),
+                        "p50": self._percentile(values, 50),
+                        "p95": self._percentile(values, 95),
+                        "p99": self._percentile(values, 99),
+                    }
+
+            # Error summary - calculate inline to avoid nested lock acquisition
+            error_summary = {}
+            for metric_name, errors in self._errors.items():
+                queue_name = metric_name.replace("errors.", "")
+                error_summary[queue_name] = dict(errors)
 
             return {
                 "counters": dict(self._counters),
                 "gauges": dict(self._gauges),
                 "timers": timer_stats,
-                "errors": self.get_error_summary(),
+                "errors": error_summary,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
 

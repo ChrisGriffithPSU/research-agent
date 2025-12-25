@@ -31,7 +31,8 @@ def test_health_status_structure():
     assert status.timestamp == timestamp
     assert status.checks["connection"] == "ok"
     assert status.metrics["test.metric"] == 42
-    assert "timestamp" in status.metrics
+    # timestamp is a separate field, not in metrics dict
+    assert isinstance(status.timestamp, datetime)
 
 
 @pytest.mark.asyncio

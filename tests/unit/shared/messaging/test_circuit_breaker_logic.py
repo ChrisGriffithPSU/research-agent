@@ -5,6 +5,7 @@ They test the logical behavior: when state should change.
 For full async behavior tests, see test_circuit_breaker.py.
 """
 import pytest
+import time
 
 from src.shared.messaging.circuit_breaker import CircuitBreaker
 
@@ -135,12 +136,13 @@ class TestCircuitBreakerStateTransitions:
         breaker.failures = 3
         breaker.last_failure_time = 1000.0
 
-        # Simulate failure in half-open (resets failure count)
-        breaker.failures = 1
-        breaker.last_failure_time = 1000.0
+        # Simulate failure in half-open - any failure should immediately open
+        # Increment failures and update timestamp
+        breaker.failures += 1
+        breaker.last_failure_time = time.time()
 
-        # If failure count reaches threshold in half-open, should open
-        if breaker.failures >= breaker.failure_threshold:
+        # In half-open state, any failure immediately opens the circuit
+        if breaker.state == "half-open":
             breaker.state = "open"
 
         assert breaker.state == "open"

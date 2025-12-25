@@ -147,6 +147,8 @@ def test_source_message_deserializes_from_json():
 
 def test_extracted_insights_message_validates_actionability_score():
     """Should validate actionability score between 0 and 1."""
+    from pydantic import ValidationError
+
     # Valid scores
     for score in [0.0, 0.5, 1.0]:
         message = ExtractedInsightsMessage(
@@ -157,13 +159,17 @@ def test_extracted_insights_message_validates_actionability_score():
             core_techniques=["Technique 1"],
             code_snippets=["code"],
             actionability_score=score,
+            original_correlation_id=str(uuid4()),
+            deduplicated_correlation_id=str(uuid4()),
         )
         assert message.actionability_score == score
 
 
 def test_extracted_insights_message_rejects_negative_score():
     """Should reject negative actionability score."""
-    with pytest.raises(ValueError, match="actionability_score must be between 0.0 and 1.0"):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="greater_than_equal"):
         ExtractedInsightsMessage(
             source_type=SourceType.ARXIV,
             source_url="https://arxiv.org/abs/2401.xxxxx",
@@ -172,12 +178,16 @@ def test_extracted_insights_message_rejects_negative_score():
             core_techniques=["Technique 1"],
             code_snippets=["code"],
             actionability_score=-0.1,
+            original_correlation_id=str(uuid4()),
+            deduplicated_correlation_id=str(uuid4()),
         )
 
 
 def test_extracted_insights_message_rejects_score_above_one():
     """Should reject actionability score > 1.0."""
-    with pytest.raises(ValueError, match="actionability_score must be between 0.0 and 1.0"):
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="less_than_equal"):
         ExtractedInsightsMessage(
             source_type=SourceType.ARXIV,
             source_url="https://arxiv.org/abs/2401.xxxxx",
@@ -186,6 +196,8 @@ def test_extracted_insights_message_rejects_score_above_one():
             core_techniques=["Technique 1"],
             code_snippets=["code"],
             actionability_score=1.1,
+            original_correlation_id=str(uuid4()),
+            deduplicated_correlation_id=str(uuid4()),
         )
 
 

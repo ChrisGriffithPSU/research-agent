@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer
 
 from src.shared.models.source import SourceType
 
@@ -41,6 +41,13 @@ class BaseMessage(BaseModel):
     consistent correlation tracking and timestamps.
     """
 
+    model_config = ConfigDict(
+        # Allow arbitrary types for flexibility
+        arbitrary_types_allowed=False,
+        # Use enum values in JSON
+        use_enum_values=False,
+    )
+
     correlation_id: str = Field(
         default_factory=lambda: str(uuid4()),
         description="Unique ID to trace message through pipeline"
@@ -54,11 +61,10 @@ class BaseMessage(BaseModel):
         description="Number of times message has been retried"
     )
 
-    class Config:
-        """Pydantic config for JSON serialization."""
-        json_encoders = {
-            datetime: lambda v: v.isoformat(),
-        }
+    @field_serializer('created_at')
+    def serialize_datetime(self, dt: datetime, _info):
+        """Serialize datetime to ISO format string."""
+        return dt.isoformat()
 
 
 class SourceMessage(BaseMessage):

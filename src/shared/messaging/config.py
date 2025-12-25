@@ -99,9 +99,11 @@ class MessagingConfig(BaseSettings):
     @property
     def connection_url(self) -> str:
         """Construct AMQP connection URL."""
+        # Strip leading slash from virtual_host to avoid double slashes in URL
+        vhost = self.virtual_host.lstrip("/") if self.virtual_host != "/" else ""
         return (
             f"amqp://{self.user}:{self.password}@{self.host}:{self.port}"
-            f"/{self.virtual_host}"
+            f"/{vhost}"
         )
 
     @field_validator("queue_max_length")

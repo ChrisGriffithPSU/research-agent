@@ -117,7 +117,7 @@ async def test_circuit_breaker_resets_on_success():
 
 
 async def test_circuit_breaker_recovers_after_timeout():
-    """Should move to half-open after timeout."""
+    """Should move to half-open after timeout, then succeed to close."""
     breaker = CircuitBreaker(failure_threshold=3, timeout=0.2)  # 200ms
 
     # Open circuit
@@ -130,15 +130,19 @@ async def test_circuit_breaker_recovers_after_timeout():
 
     assert breaker.state == "open"
 
-    # Wait for timeout
-    time.sleep(0.3)  # Wait 300ms (timeout + buffer)
+    # Wait for timeout - use asyncio.sleep for async tests
+    await asyncio.sleep(0.3)  # Wait 300ms (timeout + buffer)
 
-    # Should be in half-open (allow one attempt)
-    # Verify by trying a call - it should now go through (even if it fails)
-    with pytest.raises(RuntimeError):
-        await breaker.call(fail_func)
+    # After timeout, circuit will transition to half-open on next call
+    # If that call succeeds, it should close
+    async def success_func():
+        return "success"
 
-    assert breaker.state == "half-open"
+    result = await breaker.call(success_func)
+
+    assert result == "success"
+    assert breaker.state == "closed"  # Should be closed after successful half-open test
+    assert breaker.failures == 0
 
 
 async def test_circuit_breaker_closes_after_half_open_success():
@@ -153,8 +157,8 @@ async def test_circuit_breaker_closes_after_half_open_success():
         with pytest.raises(RuntimeError):
             await breaker.call(fail_func)
 
-    # Wait for timeout
-    time.sleep(0.3)
+    # Wait for timeout - use asyncio.sleep for async tests
+    await asyncio.sleep(0.3)
 
     # Success in half-open should close circuit
     async def succeed_func():
@@ -181,13 +185,13 @@ async def test_circuit_breaker_opens_again_after_half_open_failure():
 
     assert breaker.state == "open"
 
-    # Wait for timeout
-    time.sleep(0.3)
+    # Wait for timeout - use asyncio.sleep for async tests
+    await asyncio.sleep(0.3)
 
-    # Should be in half-open now
-    assert breaker.state == "half-open"
+    # State is still "open" until we make a call - the transition to half-open
+    # happens inside call() when timeout has expired
 
-    # Failure in half-open should re-open circuit
+    # First call will transition to half-open, then fail and re-open
     with pytest.raises(RuntimeError):
         await breaker.call(fail_func)
 

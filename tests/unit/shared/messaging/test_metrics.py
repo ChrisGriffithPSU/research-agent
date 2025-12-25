@@ -68,7 +68,7 @@ def test_metrics_record_time():
     assert stats["count"] == 3
     assert stats["min"] == 50.0
     assert stats["max"] == 200.0
-    assert stats["avg"] == 116.67  # (100+200+50)/3
+    assert abs(stats["avg"] - 116.67) < 0.01  # (100+200+50)/3, allow floating point tolerance
 
 
 def test_metrics_timer_stats_percentiles():
@@ -81,9 +81,9 @@ def test_metrics_timer_stats_percentiles():
 
     stats = metrics.get_timer_stats("test.timer")
 
-    # p50 should be ~60
-    assert 59 <= stats["p50"] <= 61
-    # p95 should be ~95
+    # p50 (median) for [10,20,30,40,50,60,70,80,90,100] should be (50+60)/2 = 55
+    assert 54 <= stats["p50"] <= 56
+    # p95 should be ~95 (9.5th element of 10, interpolated)
     assert 94 <= stats["p95"] <= 96
     # p99 should be ~99
     assert 98 <= stats["p99"] <= 100

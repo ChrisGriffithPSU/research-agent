@@ -104,13 +104,16 @@ class CircuitBreaker:
             f"Circuit breaker failure #{self.failures}/{self.failure_threshold}: {error}"
         )
 
-        # Check if threshold reached
-        if self.failures >= self.failure_threshold:
-            if self.state != "open":
-                self.state = "open"
-                logger.warning(
-                    f"Circuit breaker OPEN (threshold {self.failure_threshold} reached)"
-                )
+        # In half-open state, any failure immediately opens the circuit
+        if self.state == "half-open":
+            self.state = "open"
+            logger.warning("Circuit breaker OPEN (half-open test failed)")
+        # In closed state, check if threshold reached
+        elif self.failures >= self.failure_threshold:
+            self.state = "open"
+            logger.warning(
+                f"Circuit breaker OPEN (threshold {self.failure_threshold} reached)"
+            )
 
     def reset(self) -> None:
         """Manually reset circuit breaker to closed state.
