@@ -105,14 +105,19 @@ class OllamaClient(BaseLLMClient):
         except Exception:
             return False
 
-    def get_available_models(self) -> List[str]:
-        """Get list of models available on Ollama server."""
+    async def get_available_models(self) -> List[str]:
+        """Get list of models available on Ollama server (async)."""
+        import asyncio
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         try:
-            # Use synchronous client for this utility method
-            sync_client = ollama.Client(host=self.base_url)
-            response = sync_client.list()
+            # Use async client instead of sync
+            response = await self.client.list()
             return [model["name"] for model in response.get("models", [])]
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to list Ollama models: {e}")
             return []
 
     async def pull_model(self, model: str) -> bool:

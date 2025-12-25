@@ -11,6 +11,7 @@ import enum
 
 if TYPE_CHECKING:
     from src.shared.models.feedback import Feedback
+    from src.shared.models.source import Source
 
 
 class DigestStatus(str, enum.Enum):
@@ -112,6 +113,7 @@ class DigestItem(Base, TimestampMixin):
 
     # Relationships
     digest: Mapped[Digest] = relationship("Digest", back_populates="items")
+    source: Mapped["Source"] = relationship("Source")
     feedback: Mapped[Optional["Feedback"]] = relationship(
         "Feedback",
         back_populates="digest_item",

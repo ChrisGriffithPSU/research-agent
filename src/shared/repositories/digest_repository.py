@@ -149,15 +149,16 @@ class DigestRepository(BaseRepository[Digest]):
         Returns:
             Updated Digest instance
         """
+        from datetime import timezone
+
         logger.debug(f"DigestRepository: Updating status for id={digest_id} to {status}")
-        digest = await self.update(digest_id, status=status)
 
+        # Include delivered_at in update if transitioning to DELIVERED
+        updates = {"status": status}
         if status == DigestStatus.DELIVERED:
-            # Set delivered_at timestamp
-            digest.delivered_at = datetime.now()
-            await self.session.flush()
+            updates["delivered_at"] = datetime.now(timezone.utc)
 
-        return digest
+        return await self.update(digest_id, **updates)
 
     async def mark_delivered(self, digest_id: int) -> Digest:
         """Mark digest as delivered with timestamp.

@@ -91,13 +91,13 @@ class CacheService:
     
     async def get_cached(self, cache_key: str) -> Optional[Any]:
         """Get value from cache.
-        
+
         Args:
             cache_key: Cache key to retrieve
-        
+
         Returns:
             Cached value or None if not found
-        
+
         Example:
             value = await cache.get_cached("user:123:preferences")
             if value is None:
@@ -105,23 +105,22 @@ class CacheService:
         """
         # Validate key
         validate_cache_key(cache_key)
-        
+
         try:
-            # Placeholder for actual Redis get
-            # In production:
-            # connection = await self.connection.get_connection()
-            # data = await connection.get(cache_key)
-            # await self.connection._pool.release(connection)
-            # 
-            # if data is None:
-            #     self.metrics.record_miss(cache_key)
-            #     return None
-            # 
-            # value = self.serializer.deserialize(data)
-            # self.metrics.record_hit(cache_key)
-            # return value
-            raise NotImplementedError("Redis client not installed")
-        
+            redis = await self.connection.get_connection()
+            data = await redis.get(cache_key)
+
+            if data is None:
+                self.metrics.record_miss(cache_key)
+                logger.debug(f"Cache miss: {cache_key}")
+                return None
+
+            # Deserialize
+            value = self.serializer.deserialize(data)
+            self.metrics.record_hit(cache_key)
+            logger.debug(f"Cache hit: {cache_key}")
+            return value
+
         except Exception as e:
             logger.error(
                 f"Cache get failed for key {cache_key}: {e}",
@@ -138,39 +137,37 @@ class CacheService:
         ttl: Optional[int] = None,
     ) -> None:
         """Set value in cache.
-        
+
         Args:
             cache_key: Cache key to store
             value: Value to cache
             ttl: Time-to-live in seconds (None = no expiration)
-        
+
         Example:
             await cache.set_cached("user:123:preferences", {"theme": "dark"}, ttl=3600)
         """
         # Validate key
         validate_cache_key(cache_key)
-        
+
         # Skip None values
         if value is None:
             logger.debug(f"Skipping cache set for None value: {cache_key}")
             return
-        
+
         try:
             # Serialize value
             serialized = self.serializer.serialize(value)
-            
-            # Placeholder for actual Redis set
-            # In production:
-            # connection = await self.connection.get_connection()
-            # await connection.set(cache_key, serialized, ex=ttl)
-            # await self.connection._pool.release(connection)
-            # 
-            # self.metrics.record_size(len(serialized))
-            # logger.debug(
-            #     f"Set cache key: {cache_key}, TTL: {ttl}, Size: {len(serialized)}"
-            # )
-            raise NotImplementedError("Redis client not installed")
-        
+
+            # Set in Redis
+            redis = await self.connection.get_connection()
+            await redis.set(cache_key, serialized, ex=ttl)
+
+            # Record metrics
+            self.metrics.record_size(len(serialized))
+            logger.debug(
+                f"Set cache key: {cache_key}, TTL: {ttl}, Size: {len(serialized)} bytes"
+            )
+
         except Exception as e:
             logger.error(
                 f"Cache set failed for key {cache_key}: {e}",
@@ -181,25 +178,20 @@ class CacheService:
     
     async def delete(self, cache_key: str) -> None:
         """Delete value from cache.
-        
+
         Args:
             cache_key: Cache key to delete
-        
+
         Example:
             await cache.delete("user:123:preferences")
         """
         validate_cache_key(cache_key)
-        
+
         try:
-            # Placeholder for actual Redis delete
-            # In production:
-            # connection = await self.connection.get_connection()
-            # await connection.delete(cache_key)
-            # await self.connection._pool.release(connection)
-            # 
-            # logger.debug(f"Deleted cache key: {cache_key}")
-            raise NotImplementedError("Redis client not installed")
-        
+            redis = await self.connection.get_connection()
+            await redis.delete(cache_key)
+            logger.debug(f"Deleted cache key: {cache_key}")
+
         except Exception as e:
             logger.error(
                 f"Cache delete failed for key {cache_key}: {e}",
@@ -209,25 +201,27 @@ class CacheService:
     
     async def delete_pattern(self, pattern: str) -> None:
         """Delete all keys matching pattern.
-        
+
         Args:
             pattern: Key pattern (e.g., "cache:llm:*")
-        
+
         Example:
             await cache.delete_pattern("cache:llm:*")  # Invalidates all LLM cache
         """
         try:
-            # Placeholder for actual Redis scan/delete
-            # In production:
-            # connection = await self.connection.get_connection()
-            # keys = await connection.keys(pattern)
-            # if keys:
-            #     await connection.delete(*keys)
-            # await self.connection._pool.release(connection)
-            # 
-            # logger.info(f"Deleted {len(keys)} keys matching pattern: {pattern}")
-            raise NotImplementedError("Redis client not installed")
-        
+            redis = await self.connection.get_connection()
+
+            # Use SCAN for production safety (non-blocking)
+            keys = []
+            async for key in redis.scan_iter(match=pattern, count=100):
+                keys.append(key)
+
+            if keys:
+                await redis.delete(*keys)
+                logger.info(f"Deleted {len(keys)} keys matching pattern: {pattern}")
+            else:
+                logger.debug(f"No keys found matching pattern: {pattern}")
+
         except Exception as e:
             logger.error(
                 f"Cache delete pattern failed for {pattern}: {e}",
@@ -237,13 +231,13 @@ class CacheService:
     
     async def get_many(self, cache_keys: List[str]) -> Dict[str, Any]:
         """Get multiple values from cache efficiently.
-        
+
         Args:
             cache_keys: List of cache keys
-        
+
         Returns:
             Dict of key -> value (missing keys not included)
-        
+
         Example:
             values = await cache.get_many([
                 "user:123:preferences",
@@ -253,31 +247,28 @@ class CacheService:
         """
         if not cache_keys:
             return {}
-        
+
         # Remove duplicates
         unique_keys = list(set(cache_keys))
-        
+
         logger.debug(f"Getting {len(unique_keys)} cache keys")
-        
+
         results = {}
-        
+
         try:
-            # Placeholder for actual Redis MGET
-            # In production:
-            # connection = await self.connection.get_connection()
-            # values = await connection.mget(unique_keys)
-            # await self.connection._pool.release(connection)
-            # 
-            # for key, data in zip(unique_keys, values):
-            #     if data is not None:
-            #         results[key] = self.serializer.deserialize(data)
-            #         self.metrics.record_hit(key)
-            #     else:
-            #         self.metrics.record_miss(key)
-            # 
-            # return results
-            raise NotImplementedError("Redis client not installed")
-        
+            redis = await self.connection.get_connection()
+            values = await redis.mget(unique_keys)
+
+            for key, data in zip(unique_keys, values):
+                if data is not None:
+                    results[key] = self.serializer.deserialize(data)
+                    self.metrics.record_hit(key)
+                else:
+                    self.metrics.record_miss(key)
+
+            logger.debug(f"Cache get_many: {len(results)}/{len(unique_keys)} hits")
+            return results
+
         except Exception as e:
             logger.error(
                 f"Cache get_many failed: {e}",
@@ -292,24 +283,20 @@ class CacheService:
     
     async def exists(self, cache_key: str) -> bool:
         """Check if key exists in cache.
-        
+
         Args:
             cache_key: Cache key to check
-        
+
         Returns:
             True if key exists, False otherwise
         """
         validate_cache_key(cache_key)
-        
+
         try:
-            # Placeholder for actual Redis EXISTS
-            # In production:
-            # connection = await self.connection.get_connection()
-            # exists = await connection.exists(cache_key)
-            # await self.connection._pool.release(connection)
-            # return bool(exists)
-            raise NotImplementedError("Redis client not installed")
-        
+            redis = await self.connection.get_connection()
+            exists = await redis.exists(cache_key)
+            return bool(exists)
+
         except Exception as e:
             logger.error(
                 f"Cache exists check failed for {cache_key}: {e}",

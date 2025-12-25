@@ -2,9 +2,24 @@
 
 import time
 from typing import Any, Dict, List, Optional
-from anthropic import AsyncAnthropic
+
+try:
+    from anthropic import AsyncAnthropic
+    import anthropic
+    ANTHROPIC_AVAILABLE = True
+except ImportError:
+    AsyncAnthropic = None  # type: ignore
+    anthropic = None  # type: ignore
+    ANTHROPIC_AVAILABLE = False
 
 from .base import BaseLLMClient, LLMProvider, LLMResponse
+from src.shared.exceptions.llm import (
+    LLMError,
+    LLMTimeoutError,
+    LLMRateLimitError,
+    LLMProviderError,
+    LLMInvalidResponseError,
+)
 
 
 # Pricing per 1M tokens (as of Dec 2024 - update as needed)
@@ -25,7 +40,15 @@ class AnthropicClient(BaseLLMClient):
 
         Args:
             api_key: Anthropic API key
+
+        Raises:
+            ImportError: If anthropic package not installed
         """
+        if not ANTHROPIC_AVAILABLE:
+            raise ImportError(
+                "Anthropic package not installed. Install with: pip install anthropic"
+            )
+
         super().__init__(LLMProvider.ANTHROPIC)
         self.client = AsyncAnthropic(api_key=api_key)
         self.api_key = api_key
@@ -47,7 +70,7 @@ class AnthropicClient(BaseLLMClient):
                 model=model,
                 max_tokens=max_tokens or 4096,
                 temperature=temperature,
-                system=system if system else [],
+                system=system or "",  # Empty string instead of list
                 messages=[{"role": "user", "content": prompt}],
                 **kwargs
             )
@@ -74,8 +97,40 @@ class AnthropicClient(BaseLLMClient):
                 latency=latency,
             )
 
+        except anthropic.APITimeoutError as e:
+            raise LLMTimeoutError(
+                message="Anthropic API request timed out",
+                provider="anthropic",
+                model=model,
+                timeout_seconds=getattr(e, 'timeout', None),
+            ) from e
+        except anthropic.RateLimitError as e:
+            raise LLMRateLimitError(
+                message="Anthropic API rate limit exceeded",
+                provider="anthropic",
+                model=model,
+            ) from e
+        except anthropic.APIStatusError as e:
+            raise LLMProviderError(
+                message=f"Anthropic API error: {e.message}",
+                provider="anthropic",
+                model=model,
+                provider_code=str(e.status_code),
+                original_error=e,
+            ) from e
+        except anthropic.APIError as e:
+            raise LLMProviderError(
+                message=f"Anthropic API error: {str(e)}",
+                provider="anthropic",
+                model=model,
+                original_error=e,
+            ) from e
         except Exception as e:
-            raise RuntimeError(f"Anthropic completion failed: {str(e)}")
+            raise LLMError(
+                message=f"Unexpected error during Anthropic completion: {str(e)}",
+                provider="anthropic",
+                model=model,
+            ) from e
 
     async def generate_embedding(
         self,
@@ -92,16 +147,27 @@ class AnthropicClient(BaseLLMClient):
         )
 
     async def health_check(self) -> bool:
-        """Check if Anthropic API is reachable."""
+        """Check if Anthropic API is reachable.
+
+        Uses get_available_models() instead of creating completions
+        to avoid consuming tokens and incurring costs.
+        """
+        import logging
+
+        logger = logging.getLogger(__name__)
+
         try:
-            # Make a minimal request to test connectivity
-            await self.client.messages.create(
-                model="claude-haiku-3-5",
-                max_tokens=10,
-                messages=[{"role": "user", "content": "test"}],
-            )
-            return True
-        except Exception:
+            # Check available models as a lightweight health check
+            # This doesn't consume tokens or cost money
+            models = await self.get_available_models()
+            is_healthy = len(models) > 0
+
+            if not is_healthy:
+                logger.warning("Anthropic health check: No models available")
+
+            return is_healthy
+        except Exception as e:
+            logger.warning(f"Anthropic health check failed: {e}")
             return False
 
     def get_available_models(self) -> List[str]:

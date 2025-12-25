@@ -1,5 +1,10 @@
 """Custom exceptions for the application."""
 
+from src.shared.exceptions.base import (
+    ResearchAgentError,
+    CircuitOpenError,
+)
+
 from src.shared.exceptions.database import (
     ConnectionPoolExhaustedError,
     DatabaseError,
@@ -63,6 +68,8 @@ from src.shared.exceptions.cache import (
 
 __all__ = [
     # Base exceptions
+    "ResearchAgentError",
+    "CircuitOpenError",
     "DatabaseError",
     # Repository exceptions
     "RepositoryNotFoundError",

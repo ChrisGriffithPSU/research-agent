@@ -12,24 +12,6 @@ from src.shared.exceptions import ResearchAgentError
 logger = logging.getLogger(__name__)
 
 
-class CircuitOpenError(ResearchAgentError):
-    """Circuit breaker is open, blocking requests."""
-    
-    def __init__(self, circuit_name: str, cooldown_until: Optional[float] = None):
-        message = f"Circuit '{circuit_name}' is open"
-        if cooldown_until:
-            cooldown_iso = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(cooldown_until))
-            message += f" until {cooldown_iso}"
-        
-        details = {"circuit_name": circuit_name}
-        if cooldown_until:
-            details["cooldown_until"] = cooldown_until
-        
-        super().__init__(message=message, error_code="CIRCUIT_OPEN", details=details)
-        self.circuit_name = circuit_name
-        self.cooldown_until = cooldown_until
-
-
 def calculate_backoff(
     attempt: int,
     base_seconds: float = 1.0,

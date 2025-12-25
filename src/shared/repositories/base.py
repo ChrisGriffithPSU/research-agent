@@ -1,9 +1,9 @@
 """Generic repository base class with common CRUD operations."""
 import logging
-from typing import Generic, List, Optional, Type, TypeVar
+from typing import Any, Generic, List, Optional, Type, TypeVar
 
 # from pgvector.sqlalchemy import Vector
-from sqlalchemy import select, update
+from sqlalchemy import select, update, func
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -12,11 +12,12 @@ from src.shared.exceptions import (
     RepositoryConflictError,
     RepositoryNotFoundError,
 )
+from src.shared.models.base import Base
 
 logger = logging.getLogger(__name__)
 
 # Generic type variable for model classes
-ModelType = TypeVar("ModelType", bound=object)
+ModelType = TypeVar("ModelType", bound=Base)
 
 
 class BaseRepository(Generic[ModelType]):
@@ -219,7 +220,7 @@ class BaseRepository(Generic[ModelType]):
             ) from e
 
     async def list_by_field(
-        self, field_name: str, value: any, limit: Optional[int] = None
+        self, field_name: str, value: Any, limit: Optional[int] = None
     ) -> List[ModelType]:
         """List instances filtering by field value.
 
@@ -250,16 +251,17 @@ class BaseRepository(Generic[ModelType]):
             ) from e
 
     async def count(self) -> int:
-        """Count total number of instances.
+        """Count total number of instances using efficient SQL COUNT.
 
         Returns:
             Total count
         """
         logger.debug(f"{self._model_name}: Counting instances")
         try:
-            query = select(self.model)
+            # Use SQL COUNT(*) for efficiency
+            query = select(func.count()).select_from(self.model)
             result = await self.session.execute(query)
-            count = len(result.scalars().all())
+            count = result.scalar() or 0
             logger.debug(f"{self._model_name}: Count={count}")
             return count
         except SQLAlchemyError as e:
@@ -279,7 +281,7 @@ class BaseRepository(Generic[ModelType]):
                 sanitized[key] = value
         return sanitized
 
-    def _sanitize_value(self, value: any) -> any:
+    def _sanitize_value(self, value: Any) -> Any:
         """Sanitize single value for logging."""
         if isinstance(value, str) and len(value) > 100:
             return value[:100] + "..."
@@ -317,12 +319,16 @@ class VectorSearchMixin(Generic[ModelType]):
             f"{self._model_name}: Finding similar vectors with threshold={threshold}, limit={limit}"
         )
         try:
-            # Use cosine distance operator (<=>) and convert to similarity
+            # Use cosine distance operator (<=>) with database-side filtering
             # Cosine distance: 0 = identical, 2 = opposite
-            # Cosine similarity: 1 - distance
+            # Cosine similarity = 1 - (distance / 2)
+            # For threshold filtering: distance <= 2 * (1 - threshold)
+            max_distance = 2.0 * (1.0 - threshold)
+
             query = (
                 select(self.model)
                 .where(self.model.embedding.is_not(None))
+                .where(self.model.embedding.op("<=>")(embedding) <= max_distance)
                 .order_by(self.model.embedding.op("<=>")(embedding))
                 .limit(limit)
             )
@@ -330,19 +336,8 @@ class VectorSearchMixin(Generic[ModelType]):
             result = await self.session.execute(query)
             instances = list(result.scalars().all())
 
-            # Filter by threshold (cosine similarity = 1 - distance)
-            # We need to calculate similarity for each result
-            filtered = []
-            for instance in instances:
-                if instance.embedding is not None:
-                    # Calculate cosine similarity manually
-                    distance = self._cosine_distance(embedding, instance.embedding)
-                    similarity = 1.0 - distance
-                    if similarity >= threshold:
-                        filtered.append(instance)
-
-            logger.debug(f"{self._model_name}: Found {len(filtered)} similar vectors")
-            return filtered
+            logger.debug(f"{self._model_name}: Found {len(instances)} similar vectors")
+            return instances
         except SQLAlchemyError as e:
             logger.error(f"{self._model_name}: Database error during find_similar: {e}")
             raise DatabaseError(
@@ -391,32 +386,4 @@ class VectorSearchMixin(Generic[ModelType]):
             raise DatabaseError(
                 f"Failed to search {self._model_name}: {e}"
             ) from e
-
-    def _cosine_distance(self, vec1: List[float], vec2: List[float]) -> float:
-        """Calculate cosine distance between two vectors.
-
-        PostgreSQL pgvector uses: distance = 1 - cosine_similarity
-        Where cosine_similarity = dot(vec1, vec2) / (norm(vec1) * norm(vec2))
-
-        Args:
-            vec1: First vector
-            vec2: Second vector
-
-        Returns:
-            Cosine distance (0 = identical, 2 = opposite)
-        """
-        import math
-
-        if len(vec1) != len(vec2):
-            raise ValueError("Vectors must have same dimension")
-
-        dot_product = sum(a * b for a, b in zip(vec1, vec2))
-        norm_a = math.sqrt(sum(a * a for a in vec1))
-        norm_b = math.sqrt(sum(b * b for b in vec2))
-
-        if norm_a == 0 or norm_b == 0:
-            return 1.0  # Maximum distance for zero vectors
-
-        cosine_similarity = dot_product / (norm_a * norm_b)
-        return 1.0 - cosine_similarity
 

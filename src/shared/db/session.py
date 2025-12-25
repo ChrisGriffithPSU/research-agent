@@ -1,5 +1,5 @@
 """Async session management for database operations."""
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,13 +55,13 @@ class DatabaseSession:
     """
 
     def __init__(self):
-        self._session: AsyncSession = None
+        self._session: Optional[AsyncSession] = None
 
     async def __aenter__(self) -> AsyncSession:
         """Enter context and create session."""
         factory = _get_factory()
         self._session = factory()
-        await self._session.begin()
+        # Don't call begin() - session factory already handles transactions
         return self._session
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:

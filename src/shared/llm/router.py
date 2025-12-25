@@ -32,25 +32,36 @@ class LLMRouter:
         ollama_base_url: str = "http://localhost:11434",
         ollama_enabled: bool = False,
         cost_cap_daily: Optional[float] = None,
+        validate_models: bool = False,
     ):
         self.providers: Dict[LLMProvider, Optional[BaseLLMClient]] = {}
         self.cost_tracker: Dict[LLMProvider, float] = {}
         self.cost_cap = cost_cap_daily
+        self.validate_models_on_init = validate_models
 
         if anthropic_api_key:
-            self.providers[LLMProvider.ANTHROPIC] = AnthropicClient(anthropic_api_key)
-            self.cost_tracker[LLMProvider.ANTHROPIC] = 0.0
-            logger.info("Anthropic client initialized")
+            try:
+                self.providers[LLMProvider.ANTHROPIC] = AnthropicClient(anthropic_api_key)
+                self.cost_tracker[LLMProvider.ANTHROPIC] = 0.0
+                logger.info("Anthropic client initialized")
+            except ImportError as e:
+                logger.warning(f"Anthropic client unavailable: {e}")
 
         if openai_api_key:
-            self.providers[LLMProvider.OPENAI] = OpenAIClient(openai_api_key)
-            self.cost_tracker[LLMProvider.OPENAI] = 0.0
-            logger.info("OpenAI client initialized")
+            try:
+                self.providers[LLMProvider.OPENAI] = OpenAIClient(openai_api_key)
+                self.cost_tracker[LLMProvider.OPENAI] = 0.0
+                logger.info("OpenAI client initialized")
+            except ImportError as e:
+                logger.warning(f"OpenAI client unavailable: {e}")
 
         if ollama_enabled:
-            self.providers[LLMProvider.OLLAMA] = OllamaClient(ollama_base_url)
-            self.cost_tracker[LLMProvider.OLLAMA] = 0.0
-            logger.info(f"Ollama client initialized at {ollama_base_url}")
+            try:
+                self.providers[LLMProvider.OLLAMA] = OllamaClient(ollama_base_url)
+                self.cost_tracker[LLMProvider.OLLAMA] = 0.0
+                logger.info(f"Ollama client initialized at {ollama_base_url}")
+            except Exception as e:
+                logger.warning(f"Ollama client unavailable: {e}")
 
         self.routing_map = {
             TaskType.EXTRACTION: [LLMProvider.ANTHROPIC, LLMProvider.OLLAMA],
@@ -72,6 +83,37 @@ class LLMRouter:
             (LLMProvider.OLLAMA, TaskType.QUERY_GENERATION): "llama3.1:8b",
             (LLMProvider.OLLAMA, TaskType.EMBEDDING): "nomic-embed-text",
         }
+
+    async def validate_models_async(self) -> Dict[str, bool]:
+        """Validate that configured models exist (async version for use after init).
+
+        Returns:
+            Dict mapping model names to validation status
+        """
+        validation_results = {}
+
+        for (provider, task_type), model in self.model_map.items():
+            client = self.providers.get(provider)
+            if not client:
+                validation_results[f"{provider.value}:{model}"] = False
+                continue
+
+            try:
+                available_models = await client.get_available_models()
+                is_valid = model in available_models
+                validation_results[f"{provider.value}:{model}"] = is_valid
+
+                if not is_valid:
+                    logger.warning(
+                        f"Model '{model}' not in {provider.value} available models"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"Failed to validate model '{model}' for {provider.value}: {e}"
+                )
+                validation_results[f"{provider.value}:{model}"] = False
+
+        return validation_results
 
     async def complete(
         self,

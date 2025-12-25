@@ -4,12 +4,14 @@ import functools
 import logging
 import time
 from enum import Enum
-from typing import Callable, Optional
+from typing import Callable, Optional, Any
 
 from src.shared.exceptions import CircuitOpenError
 
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["CircuitBreaker", "CircuitState", "circuit_breaker"]
 
 
 class CircuitState(Enum):

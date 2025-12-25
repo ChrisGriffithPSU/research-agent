@@ -2,9 +2,15 @@
 import logging
 from typing import Optional
 
-# Redis will be imported when available
-# redis.asyncio: from redis.asyncio import Redis, ConnectionPool
-# For now, we'll use a placeholder
+try:
+    from redis.asyncio import Redis, ConnectionPool
+    REDIS_AVAILABLE = True
+except ImportError:
+    REDIS_AVAILABLE = False
+    Redis = None  # type: ignore
+    ConnectionPool = None  # type: ignore
+
+from src.shared.exceptions.cache import CacheConnectionError
 
 
 logger = logging.getLogger(__name__)
@@ -47,114 +53,123 @@ class RedisConnection:
         self.socket_timeout = socket_timeout
         self.socket_connect_timeout = socket_connect_timeout
         
-        # Placeholder for Redis pool (will be initialized when Redis is installed)
-        self._pool = None
-        self._redis = None
-        
+        # Redis pool and client
+        self._pool: Optional[ConnectionPool] = None
+        self._redis: Optional[Redis] = None
+
+        if not REDIS_AVAILABLE:
+            logger.warning(
+                "Redis library not installed. Install with: pip install redis[hiredis]"
+            )
+
         logger.debug(
-            f"RedisConnection initialized",
+            f"RedisConnection initialized (redis_available={REDIS_AVAILABLE})",
             extra={
                 "redis_url": redis_url,
                 "pool_size": pool_size,
                 "has_password": password is not None,
+                "redis_available": REDIS_AVAILABLE,
             },
         )
     
-    async def get_connection(self):
-        """Acquire a connection from pool.
-        
+    async def get_connection(self) -> Redis:
+        """Get Redis client from pool.
+
         Returns:
-            Redis connection
-            
+            Redis client instance
+
         Raises:
-            CacheConnectionError: If connection pool is exhausted
+            CacheConnectionError: If connection not available
         """
-        if self._pool is None:
-            logger.warning("Redis pool not initialized")
-            raise ConnectionError("Redis pool not initialized. Call initialize() first.")
-        
-        try:
-            # Placeholder for actual Redis connection acquisition
-            # In production: connection = await self._pool.acquire()
-            # return connection
-            raise NotImplementedError("Redis client not installed")
-        except Exception as e:
-            logger.error(f"Failed to acquire Redis connection: {e}", exc_info=True)
-            raise
+        if not REDIS_AVAILABLE:
+            raise CacheConnectionError(
+                "Redis library not installed. Install with: pip install redis[hiredis]"
+            )
+
+        if self._redis is None:
+            raise CacheConnectionError(
+                "Redis not initialized. Call initialize() first."
+            )
+
+        return self._redis
     
     async def initialize(self) -> None:
         """Initialize Redis connection pool.
-        
+
         This must be called before using get_connection().
+
+        Raises:
+            CacheConnectionError: If Redis unavailable or connection fails
         """
+        if not REDIS_AVAILABLE:
+            raise CacheConnectionError(
+                "Redis library not installed. Install with: pip install redis[hiredis]"
+            )
+
         logger.info("Initializing Redis connection pool")
-        
+
         try:
-            # Placeholder for actual Redis pool creation
-            # In production:
-            # self._pool = ConnectionPool.from_url(
-            #     self.redis_url,
-            #     password=self.password,
-            #     max_connections=self.pool_size,
-            #     socket_timeout=self.socket_timeout,
-            #     socket_connect_timeout=self.socket_connect_timeout,
-            #     decode_responses=False,  # Let serializer handle decoding
-            # )
-            
+            # Create connection pool
+            self._pool = ConnectionPool.from_url(
+                self.redis_url,
+                password=self.password,
+                max_connections=self.pool_size,
+                socket_timeout=self.socket_timeout,
+                socket_connect_timeout=self.socket_connect_timeout,
+                decode_responses=False,  # Let serializer handle decoding
+            )
+
+            # Create Redis client with pool
+            self._redis = Redis(connection_pool=self._pool)
+
             # Test connection
-            # redis = await self._pool.acquire()
-            # await redis.ping()
-            # self._pool.release(redis)
-            
+            await self._redis.ping()
+
             logger.info(
                 "Redis connection pool initialized successfully",
                 extra={"pool_size": self.pool_size, "redis_url": self.redis_url},
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to initialize Redis pool: {e}", exc_info=True)
-            raise ConnectionError(f"Failed to connect to Redis: {e}")
+            raise CacheConnectionError(
+                f"Failed to connect to Redis at {self.redis_url}: {e}"
+            ) from e
     
     async def ping(self) -> bool:
         """Check if Redis connection is healthy.
-        
+
         Returns:
             True if Redis responds to PING, False otherwise
         """
-        if self._pool is None:
+        if not REDIS_AVAILABLE or self._redis is None:
             return False
-        
+
         try:
-            # Placeholder for actual Redis ping
-            # In production:
-            # redis = await self._pool.acquire()
-            # result = await redis.ping()
-            # self._pool.release(redis)
-            # return result
-            raise NotImplementedError("Redis client not installed")
+            result = await self._redis.ping()
+            return bool(result)
         except Exception as e:
             logger.error(f"Redis ping failed: {e}", exc_info=True)
             return False
     
     async def close(self) -> None:
         """Close all connections in pool.
-        
+
         Call this when shutting down the application.
         """
-        if self._pool is None:
+        if self._redis is None:
             return
-        
+
         logger.info("Closing Redis connection pool")
-        
+
         try:
-            # Placeholder for actual pool closing
-            # In production:
-            # await self._pool.aclose()
-            self._pool = None
+            # Close Redis client (which closes pool)
+            await self._redis.aclose()
             self._redis = None
-            
+            self._pool = None
+
             logger.info("Redis connection pool closed")
-            
+
         except Exception as e:
             logger.error(f"Error closing Redis pool: {e}", exc_info=True)
     
