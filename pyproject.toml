@@ -81,6 +81,7 @@ fetchers = [
     "arxiv>=2.1.0",
     "kaggle>=1.6.0",
     "huggingface-hub>=0.20.0",
+    "docling>=1.0.0",
 ]
 
 # All optional dependencies (for local development)
@@ -96,6 +97,7 @@ all = [
     "arxiv>=2.1.0",
     "kaggle>=1.6.0",
     "huggingface-hub>=0.20.0",
+    "docling>=1.0.0",
 ]
 
 # Development dependencies

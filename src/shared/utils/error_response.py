@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.shared.exceptions.http import HTTPError
-from src.shared.llm.llm import LLMError
+from src.shared.exceptions.llm import LLMError
 from src.shared.exceptions.external_api import ExternalAPIError
 from src.shared.exceptions.config import ConfigError
 from src.shared.exceptions.cache import CacheError
@@ -105,8 +105,9 @@ def error_response(
             "code": exception.__class__.__name__.upper(),
             "message": exception.message,
         }
-        if exception.details:
-            error_dict.update(exception.details)
+        # DatabaseError doesn't have details attribute, but may have original
+        if hasattr(exception, 'original') and exception.original:
+            error_dict["original_error"] = str(exception.original)
         status_code = status_code or 500
     else:
         # Generic exception
