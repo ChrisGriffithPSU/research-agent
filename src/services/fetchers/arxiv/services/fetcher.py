@@ -19,7 +19,7 @@ from src.services.fetchers.arxiv.services.query_processor import QueryProcessor
 from src.services.fetchers.arxiv.services.api_client import ArxivAPIClient
 from src.services.fetchers.arxiv.services.publisher import ArxivMessagePublisher
 from src.services.fetchers.arxiv.services.pdf_processor import PDFProcessor
-from src.services.fetchers.arxiv.services.rate_limiter import RateLimiter
+from src.services.fetchers.arxiv.utils.rate_limiter import RateLimiter
 
 
 logger = logging.getLogger(__name__)

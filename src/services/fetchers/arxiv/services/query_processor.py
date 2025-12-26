@@ -244,8 +244,8 @@ Now generate {max_expansions} queries for: "{query}"
         
         # Add query with specific field prefixes
         variations.append(f"all:{query}")
-        variations.append(f-title:{query}")
-        variations.append(f-abs:{query}")
+        variations.append(f"-title:{query}")
+        variations.append(f"-abs:{query}")
         
         # Filter valid queries
         cleaned = []

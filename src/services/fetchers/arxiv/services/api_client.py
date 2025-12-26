@@ -13,7 +13,7 @@ from datetime import datetime
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
 from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, PaperSource
 from src.services.fetchers.arxiv.services.cache_manager import CacheManager
-from src.services.fetchers.arxiv.services.rate_limiter import RateLimiter
+from src.services.fetchers.arxiv.utils.rate_limiter import RateLimiter
 from src.services.fetchers.arxiv.exceptions import (
     ArxivAPIError,
     RateLimitError,
