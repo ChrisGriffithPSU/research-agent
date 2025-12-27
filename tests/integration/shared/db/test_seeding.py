@@ -1,7 +1,18 @@
-"""Tests for database seeding functionality."""
+"""Tests for database seeding functionality.
+
+These are integration tests that require a real database.
+They will be skipped if required dependencies (aiosqlite) are not available.
+"""
 import pytest
 
-from src.shared.db.session import DatabaseSession
+# Skip all tests in this module if aiosqlite is not installed
+pytest.importorskip("aiosqlite", reason="aiosqlite required for SQLite async tests")
+
+from src.shared.db.seed import (
+    seed_fetcher_states,
+    seed_system_state,
+    seed_user_profile,
+)
 from src.shared.repositories import (
     FetcherStateRepository,
     SystemStateRepository,
@@ -13,23 +24,21 @@ from src.shared.repositories import (
 async def test_seeding_idempotent(test_session):
     """Test that seeding can run multiple times safely."""
     # First run
-    async with DatabaseSession() as session:
-        from src.shared.db.seed import seed_database
-        await seed_database()
+    await seed_user_profile(test_session)
+    await seed_system_state(test_session)
+    await seed_fetcher_states(test_session)
 
     # Second run (should not fail)
-    async with DatabaseSession() as session:
-        from src.shared.db.seed import seed_database
-        await seed_database()
+    await seed_user_profile(test_session)
+    await seed_system_state(test_session)
+    await seed_fetcher_states(test_session)
 
 
 @pytest.mark.asyncio
 async def test_seed_creates_default_user(test_session):
     """Test that seeding creates default user."""
     # Seed database
-    async with DatabaseSession() as session:
-        from src.shared.db.seed import seed_database
-        await seed_database()
+    await seed_user_profile(test_session)
 
     # Verify user exists
     user_repo = UserRepository(test_session)
@@ -45,9 +54,7 @@ async def test_seed_creates_default_user(test_session):
 async def test_seed_creates_system_state(test_session):
     """Test that seeding creates system state."""
     # Seed database
-    async with DatabaseSession() as session:
-        from src.shared.db.seed import seed_database
-        await seed_database()
+    await seed_system_state(test_session)
 
     # Verify system state exists
     state_repo = SystemStateRepository(test_session)
@@ -69,9 +76,7 @@ async def test_seed_creates_system_state(test_session):
 async def test_seed_creates_fetcher_states(test_session):
     """Test that seeding creates fetcher states."""
     # Seed database
-    async with DatabaseSession() as session:
-        from src.shared.db.seed import seed_database
-        await seed_database()
+    await seed_fetcher_states(test_session)
 
     # Verify fetcher states exist
     fetcher_repo = FetcherStateRepository(test_session)
@@ -99,13 +104,12 @@ async def test_seed_transaction_atomic(test_session):
     # Seed should either succeed completely or fail completely
     # No partial seeding
 
-    async with DatabaseSession() as session:
-        from src.shared.db.seed import seed_database
-
-        try:
-            await seed_database()
-        except Exception:
-            pass  # Ignore any errors
+    try:
+        await seed_user_profile(test_session)
+        await seed_system_state(test_session)
+        await seed_fetcher_states(test_session)
+    except Exception:
+        pass  # Ignore any errors
 
     # Check that all or none exist (not partial)
     state_repo = SystemStateRepository(test_session)
@@ -117,4 +121,3 @@ async def test_seed_transaction_atomic(test_session):
 
     # Both should exist or both should not exist
     assert (email_enabled is not None) == (user is not None)
-

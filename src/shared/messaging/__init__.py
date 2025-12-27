@@ -77,7 +77,8 @@ from src.shared.messaging.queue_setup import (
 # Publisher/Consumer APIs
 from src.shared.messaging.publisher import (
     MessagePublisher,
-    get_publisher,
+    MessagePublisherFactory,
+    NullMessagePublisher,
 )
 
 from src.shared.messaging.consumer import (
@@ -136,7 +137,8 @@ __all__ = [
     "DLQ_EXCHANGE_NAME",
     # Publisher/Consumer
     "MessagePublisher",
-    "get_publisher",
+    "MessagePublisherFactory",
+    "NullMessagePublisher",
     "MessageConsumer",
     "message_handler",
     # Health checks

@@ -14,6 +14,7 @@ from src.shared.interfaces import (
 )
 from src.shared.messaging.schemas import BaseMessage
 from src.shared.messaging.retry import ExponentialBackoffStrategy
+from src.shared.messaging.exceptions import ConnectionError as MessagingConnectionError
 
 
 logger = logging.getLogger(__name__)
@@ -95,7 +96,7 @@ class MessagePublisher:
             PublishError: If publish fails after all retries
         """
         if not self._connection.is_connected():
-            raise ConnectionError("Not connected to message broker. Call connection.connect() first.")
+            raise MessagingConnectionError("Not connected to message broker. Call connection.connect() first.")
         
         # Serialize message
         try:

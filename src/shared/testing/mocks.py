@@ -8,7 +8,7 @@ import fnmatch
 import json
 import time
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 # ==================== Cache Mocks ====================
@@ -57,7 +57,7 @@ class InMemoryCacheBackend:
         self._storage[key] = (value, ttl_seconds)
         
         if ttl_seconds:
-            self._expiry[key] = datetime.utcnow() + datetime.timedelta(seconds=ttl_seconds)
+            self._expiry[key] = datetime.utcnow() + timedelta(seconds=ttl_seconds)
         elif key in self._expiry:
             del self._expiry[key]
     
@@ -581,7 +581,10 @@ class MockCircuitBreaker:
             raise CircuitOpenError("Circuit is open")
         
         try:
-            result = await asyncio.coroutine(func)(*args, **kwargs)
+            if asyncio.iscoroutinefunction(func):
+                result = await func(*args, **kwargs)
+            else:
+                result = func(*args, **kwargs)
             self._on_success()
             return result
         except Exception as e:

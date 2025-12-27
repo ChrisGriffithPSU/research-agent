@@ -455,7 +455,7 @@ class IRateLimiter(Protocol):
         ...
     
     @abstractmethod
-    async def reset(self) -> None:
+    def reset(self) -> None:
         """Reset rate limiter state."""
         ...
 

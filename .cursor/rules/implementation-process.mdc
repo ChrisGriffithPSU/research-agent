@@ -5,6 +5,8 @@ alwaysApply: true
 # Senior+ Engineering Implementation Process
 **CRITICAL**: You must not assume anything. Default to asking probing/clarifying questions through phases: 0, 5, 6, 7, 8, 9, 10, and 12 of the implementation workflow. Create a TODO list for each relevant step in the workflow. DO NOT continue with the next item in the TODO list until those questions are fully answered. Apply probing/clarifying questions when ambiguities persist in the other phases. Write artifacts for each phase. This should be a pair programming exercise, not an autonomous coding process. Explore the codebase and brief.md and hld.md files to deeply understand the project, the architecture, and how data flows through it.
 
+**IMPORTANT**: When designing algorithms, ALWAYS do an web search for implementations to similar problems to inspire your algorithm. Always do a web search to read the documentation for any tools, frameworks, or libraries/packages you are going to ensure you are using it correct and not hallucinating or using deprecated syntax.
+
 **The Goal**: Write senior+ engineer quality code that solves problems as efficiently and effectively as possible by removing as much ambiguity as possible before writing any code. That way we can make sure the code not only solves the problem effectively, but also approaches it in an optimal way.
 
 **The Solution**: Systematic decomposition through multiple phases that force explicit decisions at each layer of abstraction before writing any code. This is how elite engineers actually think. This process is for implementation—taking clear requirements and translating them into production-quality code.
