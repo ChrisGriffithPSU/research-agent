@@ -1,19 +1,15 @@
-"""Query processor using LLM for fuzzy matching expansion.
+"""Refactored query processor using dependency injection.
 
-Integrates with existing LLMRouter from src/shared/llm/router.py
-Uses TaskType.QUERY_GENERATION for routing to appropriate model.
+Uses LLM router for query expansion with injectable dependencies.
 """
 import json
 import re
 import logging
 from typing import List, Optional, Dict, Any
 
-from src.shared.llm.router import LLMRouter, TaskType, LLMProvider
-from src.shared.llm.base import LLMResponse
-
+from src.shared.interfaces import ILLMRouter, LLMResponse
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
 from src.services.fetchers.arxiv.schemas.paper import QueryExpansion
-from src.services.fetchers.arxiv.services.cache_manager import CacheManager
 from src.services.fetchers.arxiv.exceptions import LLMError, QueryProcessingError
 
 
@@ -23,15 +19,45 @@ logger = logging.getLogger(__name__)
 class QueryProcessor:
     """Query processor using LLM for fuzzy matching expansion.
     
-    Integrates with existing LLMRouter from src/shared/llm/router.py
-    Uses TaskType.QUERY_GENERATION for routing to appropriate model.
+    Expands raw queries into multiple search queries for better recall.
+    All dependencies are injected through the constructor.
+    
+    Example:
+        # Production use with real LLM
+        from src.shared.llm.router import LLMRouter, TaskType
+        from src.shared.llm.anthropic_client import AnthropicClient
+        
+        router = LLMRouter(
+            providers={
+                "anthropic": AnthropicClient(api_key="..."),
+            }
+        )
+        
+        processor = QueryProcessor(
+            llm_router=router,
+            cache_manager=cache_manager,  # Optional
+            config=config,
+        )
+        
+        # Testing use with mocks
+        from src.shared.testing.mocks import MockLLMRouter
+        
+        router = MockLLMRouter()
+        processor = QueryProcessor(
+            llm_router=router,
+            cache_manager=None,  # Optional
+        )
+        
+        # Use processor
+        expansion = await processor.expand_query("transformer time series")
     
     Attributes:
-        llm_router: LLMRouter instance for LLM calls
-        cache_manager: CacheManager for caching expansions
+        llm_router: ILLMRouter for LLM calls
+        cache_manager: Optional cache manager for caching expansions
         config: ArXiv fetcher configuration
         max_expansions: Maximum number of query variations
         temperature: LLM temperature for query generation
+        _initialized: Whether the service has been initialized
     """
     
     # Prompt template for query expansion
@@ -59,15 +85,15 @@ Now generate {max_expansions} queries for: "{query}"
     
     def __init__(
         self,
-        llm_router: Optional[LLMRouter] = None,
-        cache_manager: Optional[CacheManager] = None,
+        llm_router: Optional[ILLMRouter] = None,
+        cache_manager: Optional['CacheManager'] = None,
         config: Optional[ArxivFetcherConfig] = None,
     ):
         """Initialize query processor.
         
         Args:
-            llm_router: LLMRouter instance (creates default if not provided)
-            cache_manager: CacheManager for caching expansions
+            llm_router: ILLMRouter instance for LLM calls (None = use fallback only)
+            cache_manager: CacheManager for caching expansions (optional)
             config: ArXiv fetcher configuration
         """
         self.llm_router = llm_router
@@ -80,22 +106,17 @@ Now generate {max_expansions} queries for: "{query}"
     async def initialize(self) -> None:
         """Initialize the query processor.
         
-        Creates default LLMRouter if not provided.
+        For this implementation, initialization is a no-op since
+        dependencies are injected through the constructor.
         """
-        if self._initialized:
-            return
-            
-        if self.llm_router is None:
-            self.llm_router = LLMRouter(
-                ollama_enabled=True,  # Prefer local Ollama
-            )
-            logger.info("Created default LLMRouter for query processing")
-        
         self._initialized = True
         logger.info("QueryProcessor initialized")
     
     async def expand_query(self, raw_query: str) -> QueryExpansion:
         """Expand raw query into multiple search queries using LLM.
+        
+        Uses LLM to generate query variations for better recall.
+        Falls back to simple expansion if LLM is not available.
         
         Args:
             raw_query: Original query from orchestration
@@ -127,20 +148,23 @@ Now generate {max_expansions} queries for: "{query}"
         )
         
         try:
-            response = await self.llm_router.complete(
-                prompt=prompt,
-                task_type=TaskType.QUERY_GENERATION,
-                temperature=self.temperature,
-                max_tokens=512,
-                force_provider=LLMProvider.OLLAMA,  # Prefer local
-            )
-            
-            # Parse JSON response
-            expansions = self._parse_expansions(response.content)
+            if self.llm_router is not None:
+                response = await self.llm_router.complete(
+                    prompt=prompt,
+                    task_type="query_generation",
+                    temperature=self.temperature,
+                    max_tokens=512,
+                )
+                
+                # Parse JSON response
+                expansions = self._parse_expansions(response.content)
+            else:
+                # No LLM router, use fallback
+                expansions = self._fallback_expansions(raw_query)
             
             if not expansions:
                 logger.warning(
-                    f"LLM returned empty expansions for: {raw_query[:50]}..."
+                    f"Empty expansions for: {raw_query[:50]}..."
                 )
                 expansions = self._fallback_expansions(raw_query)
             
@@ -292,9 +316,10 @@ Now generate {max_expansions} queries for: "{query}"
         """
         if not self._initialized:
             return False
-            
+        
         if self.llm_router is None:
-            return False
+            # No LLM router, but fallback works
+            return True
         
         try:
             health = await self.llm_router.health_check_all()
@@ -314,15 +339,20 @@ Now generate {max_expansions} queries for: "{query}"
             "initialized": self._initialized,
             "max_expansions": self.max_expansions,
             "temperature": self.temperature,
-            "llm_provider": self.config.llm_provider,
+            "llm_provider": self.config.llm_provider if self.llm_router else "fallback",
             "llm_model": self.config.llm_model,
+            "has_cache": self.cache_manager is not None,
         }
+    
+    @property
+    def router(self) -> Optional[ILLMRouter]:
+        """Get the LLM router (for testing)."""
+        return self.llm_router
     
     def __repr__(self) -> str:
         return (
             f"QueryProcessor("
             f"initialized={self._initialized}, "
             f"max_expansions={self.max_expansions}, "
-            f"provider={self.config.llm_provider})"
+            f"has_llm={self.llm_router is not None})"
         )
-

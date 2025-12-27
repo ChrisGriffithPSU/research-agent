@@ -1,58 +1,80 @@
-"""Message publisher for RabbitMQ."""
+"""Refactored message publisher with dependency injection.
+
+Provides a clean interface for message publishing with injectable dependencies.
+"""
 import asyncio
 import logging
-import json
-from typing import Optional
+from typing import Any, Dict, Optional
 
-import aio_pika
-
-from src.shared.messaging.connection import RabbitMQConnection
-from src.shared.messaging.retry import IRetryStrategy, ExponentialBackoffStrategy
-from src.shared.messaging.circuit_breaker import CircuitBreaker
+from src.shared.interfaces import (
+    IMessageConnection,
+    IRetryStrategy,
+    ICircuitBreaker,
+    IMessagePublisher,
+)
 from src.shared.messaging.schemas import BaseMessage
-from src.shared.messaging.metrics import get_metrics
-from src.shared.messaging.exceptions import PublishError, ConnectionError
+from src.shared.messaging.retry import ExponentialBackoffStrategy
+
 
 logger = logging.getLogger(__name__)
 
 
 class MessagePublisher:
-    """RabbitMQ message publisher with retry and circuit breaker.
-
-    Features:
-    - Publisher confirms (wait for RabbitMQ acknowledgement)
-    - Retry with exponential backoff
-    - Circuit breaker protection
-    - Automatic JSON serialization
-    - Correlation ID tracking
-    - Metrics collection
+    """RabbitMQ message publisher with injectable dependencies.
+    
+    Publishes messages to a message broker with retry and circuit breaker support.
+    All dependencies are injected through the constructor.
+    
+    Example:
+        # Production use with real connection
+        connection = RabbitMQConnection(connection_string="amqp://localhost:5672/")
+        publisher = MessagePublisher(
+            connection=connection,
+            retry_strategy=ExponentialBackoffStrategy(max_retries=5),
+            circuit_breaker=CircuitBreaker(failure_threshold=5),
+        )
+        await connection.connect()
+        
+        # Testing use with mocks
+        from src.shared.testing.mocks import (
+            MockMessageConnection,
+            MockRetryStrategy,
+            MockCircuitBreaker,
+        )
+        publisher = MessagePublisher(
+            connection=MockMessageConnection(),
+            retry_strategy=MockRetryStrategy(max_retries=3),
+        )
+        
+        # Use publisher
+        await publisher.publish(
+            message=MyMessage(),
+            routing_key="test.queue",
+        )
+    
+    Attributes:
+        _connection: Message broker connection (IMessageConnection)
+        _retry_strategy: Strategy for retrying failed publishes
+        _circuit_breaker: Circuit breaker for fault tolerance
     """
-
+    
     def __init__(
         self,
-        connection: RabbitMQConnection,
+        connection: IMessageConnection,
         retry_strategy: Optional[IRetryStrategy] = None,
-        use_circuit_breaker: bool = True,
+        circuit_breaker: Optional[ICircuitBreaker] = None,
     ):
         """Initialize message publisher.
-
+        
         Args:
-            connection: RabbitMQ connection
-            retry_strategy: Retry strategy (uses ExponentialBackoff if not provided)
-            use_circuit_breaker: Enable circuit breaker protection
+            connection: Message broker connection (RabbitMQ, in-memory, etc.)
+            retry_strategy: Strategy for retrying failed publishes
+            circuit_breaker: Circuit breaker for fault tolerance
         """
         self._connection = connection
         self._retry_strategy = retry_strategy or ExponentialBackoffStrategy()
-        self._circuit_breaker: Optional[CircuitBreaker] = None
-        self._metrics = get_metrics()
-
-        if use_circuit_breaker:
-            from src.shared.messaging.config import messaging_config
-            self._circuit_breaker = CircuitBreaker(
-                failure_threshold=messaging_config.circuit_breaker_failure_threshold,
-                timeout=messaging_config.circuit_breaker_timeout,
-            )
-
+        self._circuit_breaker = circuit_breaker
+    
     async def publish(
         self,
         message: BaseMessage,
@@ -60,52 +82,36 @@ class MessagePublisher:
         mandatory: bool = False,
         immediate: bool = False,
     ) -> None:
-        """Publish a message to RabbitMQ.
-
+        """Publish a message to the broker.
+        
         Args:
-            message: Pydantic message model (will be serialized to JSON)
+            message: Message to publish
             routing_key: Routing key for topic exchange
             mandatory: Fail if no queue is bound
             immediate: Fail if no consumer is ready
-
+            
         Raises:
+            ConnectionError: If not connected to broker
             PublishError: If publish fails after all retries
-            ConnectionError: If not connected to RabbitMQ
         """
-        if not self._connection.is_connected:
-            raise ConnectionError(
-                "Not connected to RabbitMQ. Call connection.connect() first."
-            )
-
-        # Serialize message to JSON
+        if not self._connection.is_connected():
+            raise ConnectionError("Not connected to message broker. Call connection.connect() first.")
+        
+        # Serialize message
         try:
             message_json = message.model_dump_json()
             message_bytes = message_json.encode("utf-8")
         except Exception as e:
-            logger.error(f"Failed to serialize message: {e}")
             raise PublishError(f"Message serialization failed", original=e) from e
-
-        # Apply circuit breaker if enabled
-        if self._circuit_breaker:
-            try:
-                await self._publish_with_retry(
-                    message_bytes,
-                    routing_key,
-                    mandatory,
-                    immediate,
-                )
-            except Exception as e:
-                # Circuit breaker already handles retries
-                self._metrics.record_error(routing_key, type(e).__name__)
-                raise
-        else:
-            await self._publish_with_retry(
-                message_bytes,
-                routing_key,
-                mandatory,
-                immediate,
-            )
-
+        
+        # Publish with retry and circuit breaker
+        await self._publish_with_retry(
+            message_bytes,
+            routing_key,
+            mandatory,
+            immediate,
+        )
+    
     async def _publish_with_retry(
         self,
         message_bytes: bytes,
@@ -114,22 +120,18 @@ class MessagePublisher:
         immediate: bool,
     ) -> None:
         """Publish message with retry logic.
-
+        
         Args:
             message_bytes: Serialized message bytes
             routing_key: Routing key for topic exchange
             mandatory: Fail if no queue is bound
             immediate: Fail if no consumer is ready
-
-        Raises:
-            PublishError: If all retry attempts fail
         """
         attempt = 0
         last_error = None
-
+        
         while True:
             try:
-                # Use circuit breaker if enabled
                 if self._circuit_breaker:
                     await self._circuit_breaker.call(
                         self._do_publish,
@@ -145,41 +147,32 @@ class MessagePublisher:
                         mandatory,
                         immediate,
                     )
-
-                # Success - record metrics and return
-                self._metrics.record_message_published(routing_key)
-                logger.info(
-                    f"Published message to {routing_key} "
-                    f"(attempt {attempt + 1})"
-                )
+                
+                logger.info(f"Published message to {routing_key}")
                 return
-
+                
             except Exception as e:
                 last_error = e
                 attempt += 1
-
+                
                 # Check if should retry
                 should_retry = await self._retry_strategy.should_retry(attempt, e)
-
+                
                 if not should_retry:
                     # All retries exhausted or permanent error
-                    self._metrics.record_error(routing_key, type(e).__name__)
-                    logger.error(
-                        f"Failed to publish to {routing_key} after {attempt} attempts: {e}"
-                    )
                     raise PublishError(
                         f"Failed to publish to {routing_key} after {attempt} attempts",
                         original=e,
                     ) from e
-
+                
                 # Backoff and retry
                 backoff = self._retry_strategy.get_backoff(attempt)
                 logger.warning(
-                    f"Publish attempt {attempt + 1} failed, retrying in {backoff:.2f}s: {e}"
+                    f"Publish attempt {attempt} failed, retrying in {backoff:.2f}s: {e}"
                 )
-
+                
                 await asyncio.sleep(backoff)
-
+    
     async def _do_publish(
         self,
         message_bytes: bytes,
@@ -187,103 +180,180 @@ class MessagePublisher:
         mandatory: bool,
         immediate: bool,
     ) -> None:
-        """Perform actual publish to RabbitMQ.
-
+        """Perform actual publish to broker.
+        
         Args:
             message_bytes: Serialized message bytes
             routing_key: Routing key for topic exchange
             mandatory: Fail if no queue is bound
             immediate: Fail if no consumer is ready
-
-        Raises:
-            Exception: If publish fails (not caught here)
         """
         channel = self._connection.channel
-
-        # Enable publisher confirms
-        await channel.set_confirm_delivery()
-
-        # Publish message
-        from src.shared.messaging.queue_setup import EXCHANGE_NAME
+        
+        # Broker-specific publish logic
+        # This is abstracted in the connection's channel
         await channel.publish(
-            exchange=EXCHANGE_NAME,
-            routing_key=routing_key,
             body=message_bytes,
+            routing_key=routing_key,
             mandatory=mandatory,
             immediate=immediate,
-            properties=aio_pika.BasicProperties(
-                delivery_mode=2,  # Persistent messages
-                content_type="application/json",
-            ),
         )
-
+    
     async def health_check(self) -> bool:
         """Check if publisher is healthy.
-
+        
         Returns:
-            True if connected, False otherwise
+            True if healthy, False otherwise
         """
         try:
-            is_connected = self._connection.is_connected
-
-            if self._circuit_breaker and self._circuit_breaker.is_open:
-                logger.warning("Circuit breaker is open, publisher unhealthy")
+            if self._circuit_breaker and self._circuit_breaker.is_open():
                 return False
-
-            return is_connected
-
-        except Exception as e:
-            logger.error(f"Publisher health check failed: {e}")
+            return self._connection.is_connected()
+        except Exception:
             return False
-
-    def reset_circuit_breaker(self) -> None:
-        """Manually reset circuit breaker to closed state.
-
-        Use this after RabbitMQ recovers from failure.
-        """
-        if self._circuit_breaker:
-            self._circuit_breaker.reset()
-            logger.info("Publisher circuit breaker reset")
-
+    
+    async def close(self) -> None:
+        """Close publisher and connection."""
+        await self._connection.close()
+        logger.info("MessagePublisher closed")
+    
+    @property
+    def connection(self) -> IMessageConnection:
+        """Get the underlying connection (for testing)."""
+        return self._connection
+    
+    @property
+    def circuit_breaker(self) -> Optional[ICircuitBreaker]:
+        """Get the circuit breaker (for testing)."""
+        return self._circuit_breaker
+    
     def __repr__(self) -> str:
-        """String representation."""
         return (
-            f"MessagePublisher(connected={self._connection.is_connected}, "
+            f"MessagePublisher(connected={self._connection.is_connected()}, "
             f"circuit_breaker={'enabled' if self._circuit_breaker else 'disabled'})"
         )
 
 
-# Global publisher singleton
-_publisher_lock = asyncio.Lock()
-_global_publisher: Optional[MessagePublisher] = None
-
-
-async def get_publisher(
-    connection: Optional[RabbitMQConnection] = None,
-    retry_strategy: Optional[IRetryStrategy] = None,
-) -> MessagePublisher:
-    """Get or create global message publisher.
-
-    Args:
-        connection: RabbitMQ connection (uses global if not provided)
-        retry_strategy: Retry strategy (uses default if not provided)
-
-    Returns:
-        Singleton MessagePublisher instance
+class MessagePublisherFactory:
+    """Factory for creating MessagePublisher instances.
+    
+    Provides convenient methods for creating publishers with common configurations.
     """
-    global _global_publisher
+    
+    @staticmethod
+    def create_rabbitmq(
+        connection_string: str = "amqp://localhost:5672/",
+        max_retries: int = 5,
+        base_delay: float = 1.0,
+        failure_threshold: int = 5,
+        timeout: float = 60.0,
+    ) -> MessagePublisher:
+        """Create MessagePublisher with RabbitMQ connection.
+        
+        Args:
+            connection_string: AMQP connection string
+            max_retries: Maximum retry attempts
+            base_delay: Base delay for exponential backoff
+            failure_threshold: Circuit breaker failure threshold
+            timeout: Circuit breaker timeout
+            
+        Returns:
+            Configured MessagePublisher instance
+        """
+        from src.shared.messaging.connection import RabbitMQConnection
+        from src.shared.messaging.circuit_breaker import CircuitBreaker
+        
+        connection = RabbitMQConnection(connection_string=connection_string)
+        
+        retry_strategy = ExponentialBackoffStrategy(
+            max_retries=max_retries,
+            base_delay=base_delay,
+        )
+        
+        circuit_breaker = CircuitBreaker(
+            failure_threshold=failure_threshold,
+            timeout=timeout,
+        )
+        
+        return MessagePublisher(
+            connection=connection,
+            retry_strategy=retry_strategy,
+            circuit_breaker=circuit_breaker,
+        )
+    
+    @staticmethod
+    def create_null() -> 'NullMessagePublisher':
+        """Create null publisher that does nothing.
+        
+        Useful for testing and development.
+        
+        Returns:
+            NullMessagePublisher instance
+        """
+        return NullMessagePublisher()
+    
+    @staticmethod
+    def create_mock(
+        connection: Optional['MockMessageConnection'] = None,
+    ) -> 'MockMessagePublisher':
+        """Create mock publisher for testing.
+        
+        Args:
+            connection: Optional mock connection
+            
+        Returns:
+            MockMessagePublisher instance
+        """
+        from src.shared.testing.mocks import MockMessagePublisher
+        
+        return MockMessagePublisher(connection=connection)
 
-    async with _publisher_lock:
-        if _global_publisher is None:
-            if connection is None:
-                connection = RabbitMQConnection()
-                await connection.connect()
 
-            _global_publisher = MessagePublisher(
-                connection=connection,
-                retry_strategy=retry_strategy,
-            )
-            logger.debug("Global publisher instance created")
+class NullMessagePublisher:
+    """Null publisher that does nothing.
+    
+    Useful for testing and when message publishing is optional.
+    
+    Example:
+        # Use in tests
+        publisher = NullMessagePublisher()
+        await publisher.publish(MyMessage(), routing_key="test")  # Does nothing
+    """
+    
+    async def publish(
+        self,
+        message: Any,
+        routing_key: str,
+        **kwargs,
+    ) -> None:
+        """Do nothing."""
+        pass
+    
+    async def health_check(self) -> bool:
+        """Always healthy."""
+        return True
+    
+    async def close(self) -> None:
+        """Do nothing."""
+        pass
 
-    return _global_publisher
 
+class PublishError(Exception):
+    """Raised when message publishing fails after all retries."""
+    
+    def __init__(self, message: str, original: Optional[Exception] = None):
+        self.message = message
+        self.original = original
+        super().__init__(message)
+
+
+# Remove the old global singleton and get_publisher function
+# The new pattern uses explicit dependency injection
+
+
+__all__ = [
+    "MessagePublisher",
+    "MessagePublisherFactory",
+    "NullMessagePublisher",
+    "PublishError",
+]

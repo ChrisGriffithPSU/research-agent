@@ -1,19 +1,16 @@
-"""arXiv API client with rate limiting and caching.
+"""Refactored arXiv API client with dependency injection.
 
-Integrates with existing cache infrastructure.
-Handles rate limiting (1 req/3 sec), pagination, and error handling.
+Uses injectable HTTP client and rate limiter for testability.
 """
 import xml.etree.ElementTree as ET
 from typing import List, Optional, Dict, Any
 import httpx
-import asyncio
 import logging
 from datetime import datetime
 
+from src.shared.interfaces import IHTTPClient, IRateLimiter
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
 from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, PaperSource
-from src.services.fetchers.arxiv.services.cache_manager import CacheManager
-from src.services.fetchers.arxiv.utils.rate_limiter import RateLimiter
 from src.services.fetchers.arxiv.exceptions import (
     ArxivAPIError,
     RateLimitError,
@@ -25,13 +22,8 @@ from src.services.fetchers.arxiv.exceptions import (
 logger = logging.getLogger(__name__)
 
 
-class ArxivAPIError(Exception):
-    """Exception for arXiv API errors."""
-    pass
-
-
 class ArxivAPIClient:
-    """Client for arXiv API.
+    """Client for arXiv API with injectable dependencies.
     
     Features:
     - Rate limiting (1 request per 3 seconds)
@@ -40,12 +32,33 @@ class ArxivAPIClient:
     - XML parsing
     - Error handling with retries
     
+    All dependencies are injected through the constructor.
+    
+    Example:
+        # Production use with real HTTP client
+        client = ArxivAPIClient(
+            http_client=httpx.AsyncClient(timeout=30.0),
+            rate_limiter=RateLimiter(rate=0.333),
+            cache=cache_backend,  # Optional
+            config=config,
+        )
+        
+        # Testing use with mocks
+        from src.shared.testing.mocks import MockHTTPClient, MockRateLimiter
+        
+        client = ArxivAPIClient(
+            http_client=MockHTTPClient(),
+            rate_limiter=MockRateLimiter(),
+        )
+        
+        # Use client
+        papers = await client.search(query="transformer", max_results=10)
+    
     Attributes:
-        base_url: arXiv API base URL
-        rate_limiter: Rate limiter instance
-        cache: Optional cache manager
+        http_client: HTTP client implementation (IHTTPClient)
+        rate_limiter: Rate limiter implementation (IRateLimiter)
+        cache: Optional cache backend
         config: Configuration
-        http_client: HTTP client
     """
     
     BASE_URL = "http://export.arxiv.org/api/query"
@@ -61,29 +74,42 @@ class ArxivAPIClient:
     
     def __init__(
         self,
+        http_client: Optional[IHTTPClient] = None,
+        rate_limiter: Optional[IRateLimiter] = None,
+        cache: Optional[Any] = None,  # Optional cache backend
         config: Optional[ArxivFetcherConfig] = None,
-        cache: Optional[CacheManager] = None,
-        rate_limiter: Optional[RateLimiter] = None,
     ):
         """Initialize arXiv API client.
         
         Args:
+            http_client: HTTP client for API calls (IHTTPClient)
+            rate_limiter: Rate limiter for API requests (IRateLimiter)
+            cache: Cache manager for caching responses (optional)
             config: ArXiv fetcher configuration
-            cache: Cache manager for caching responses
-            rate_limiter: Rate limiter instance
         """
         self.config = config or ArxivFetcherConfig()
         self.cache = cache
-        self.rate_limiter = rate_limiter or RateLimiter(
-            rate=self.config.rate_limit_requests_per_second,
-        )
         
-        # HTTP client configuration
-        self.timeout = httpx.Timeout(30.0, connect=10.0)
-        self.http_client = httpx.AsyncClient(
-            timeout=self.timeout,
-            follow_redirects=True,
-        )
+        # Use injectable HTTP client, default to httpx
+        if http_client is None:
+            self._http_client = httpx.AsyncClient(
+                timeout=httpx.Timeout(30.0, connect=10.0),
+                follow_redirects=True,
+            )
+            self._owns_http_client = True
+        else:
+            self._http_client = http_client
+            self._owns_http_client = False
+        
+        # Use injectable rate limiter
+        if rate_limiter is None:
+            self._rate_limiter = DefaultRateLimiter(
+                rate=self.config.rate_limit_requests_per_second,
+            )
+            self._owns_rate_limiter = True
+        else:
+            self._rate_limiter = rate_limiter
+            self._owns_rate_limiter = False
         
         # Statistics
         self._request_count = 0
@@ -96,8 +122,19 @@ class ArxivAPIClient:
     
     async def close(self) -> None:
         """Close HTTP client."""
-        await self.http_client.aclose()
+        if self._owns_http_client:
+            await self._http_client.aclose()
         logger.info("ArxivAPIClient closed")
+    
+    @property
+    def http_client(self) -> IHTTPClient:
+        """Get the HTTP client (for testing)."""
+        return self._http_client
+    
+    @property
+    def rate_limiter(self) -> IRateLimiter:
+        """Get the rate limiter (for testing)."""
+        return self._rate_limiter
     
     async def search(
         self,
@@ -134,13 +171,13 @@ class ArxivAPIClient:
                 "sort_order": sort_order,
             }
             cached = await self.cache.get_api_response(query, **cache_key_params)
-            if cached:
+            if cached and "papers" in cached:
                 self._cache_hit_count += 1
                 logger.debug(f"Cache hit for query: {query[:50]}...")
                 return self._parse_cached_response(cached)
         
         # Apply rate limiting
-        await self.rate_limiter.acquire()
+        await self._rate_limiter.acquire()
         
         # Build URL
         url = self._build_search_url(
@@ -153,7 +190,7 @@ class ArxivAPIClient:
         
         try:
             logger.debug(f"Executing arXiv search: {query[:50]}...")
-            response = await self.http_client.get(url)
+            response = await self._http_client.get(url)
             response.raise_for_status()
             self._request_count += 1
             
@@ -181,7 +218,7 @@ class ArxivAPIClient:
             if e.response.status_code == 429:
                 raise RateLimitError(
                     message="arXiv rate limit exceeded",
-                    retry_after=3,  # arXiv uses 3 second intervals
+                    retry_after=3,
                     original=e,
                 )
             raise ArxivAPIError(
@@ -226,7 +263,6 @@ class ArxivAPIClient:
             query = f"cat:{category}"
             
             if days_back:
-                # Add date filter
                 from datetime import datetime, timedelta
                 date_from = datetime.utcnow() - timedelta(days=days_back)
                 date_str = date_from.strftime("%Y%m%d")
@@ -291,18 +327,7 @@ class ArxivAPIClient:
         sort_by: str,
         sort_order: str,
     ) -> str:
-        """Build arXiv API search URL.
-        
-        Args:
-            query: Search query
-            max_results: Maximum results
-            start_index: Starting index
-            sort_by: Sort field
-            sort_order: Sort order
-            
-        Returns:
-            Full API URL
-        """
+        """Build arXiv API search URL."""
         params = {
             "search_query": query,
             "start": start_index,
@@ -311,7 +336,6 @@ class ArxivAPIClient:
             "sortOrder": sort_order,
         }
         
-        # Build URL
         param_str = "&".join(f"{k}={v}" for k, v in params.items())
         return f"{self.BASE_URL}?{param_str}"
     
@@ -320,15 +344,7 @@ class ArxivAPIClient:
         xml_content: str,
         source_query: str = "",
     ) -> List[PaperMetadata]:
-        """Parse ATOM response from arXiv API.
-        
-        Args:
-            xml_content: XML response content
-            source_query: Original query for tracking
-            
-        Returns:
-            List of PaperMetadata
-        """
+        """Parse ATOM response from arXiv API."""
         papers = []
         
         try:
@@ -365,18 +381,9 @@ class ArxivAPIClient:
         ns: Dict[str, str],
         source_query: str,
     ) -> Optional[PaperMetadata]:
-        """Parse a single ATOM entry.
-        
-        Args:
-            entry: XML element for entry
-            namespaces: XML namespaces
-            source_query: Original query
-            
-        Returns:
-            PaperMetadata or None if parsing fails
-        """
+        """Parse a single ATOM entry."""
         try:
-            # Extract ID (format: http://arxiv.org/abs/2401.12345v1)
+            # Extract ID
             id_elem = entry.find("atom:id", ns)
             arxiv_id_raw = id_elem.text if id_elem is not None else ""
             
@@ -394,7 +401,6 @@ class ArxivAPIClient:
             # Extract title
             title_elem = entry.find("atom:title", ns)
             title = title_elem.text if title_elem is not None else ""
-            # Clean title (arXiv titles have newlines)
             title = " ".join(title.strip().split())
             
             # Extract abstract
@@ -416,17 +422,16 @@ class ArxivAPIClient:
                 cat_term = category.get("term", "")
                 if cat_term:
                     categories.append(cat_term)
-                    # Extract main category and subcategory
                     if "." in cat_term:
                         parts = cat_term.split(".")
                         if len(parts) >= 1:
-                            subcategories.append(parts[0])  # Main category
+                            subcategories.append(parts[0])
             
             # Extract dates
             published_elem = entry.find("atom:published", ns)
             submitted_date = ""
             if published_elem is not None and published_elem.text:
-                submitted_date = published_elem.text[:10]  # YYYY-MM-DD
+                submitted_date = published_elem.text[:10]
             
             updated_elem = entry.find("atom:updated", ns)
             updated_date = None
@@ -481,14 +486,7 @@ class ArxivAPIClient:
             return None
     
     def _parse_cached_response(self, cached_data: Dict[str, Any]) -> List[PaperMetadata]:
-        """Parse cached response data.
-        
-        Args:
-            cached_data: Cached response dict
-            
-        Returns:
-            List of PaperMetadata
-        """
+        """Parse cached response data."""
         papers = []
         for paper_data in cached_data.get("papers", []):
             try:
@@ -498,14 +496,9 @@ class ArxivAPIClient:
         return papers
     
     async def health_check(self) -> bool:
-        """Check if arXiv API is accessible.
-        
-        Returns:
-            True if API is healthy, False otherwise
-        """
+        """Check if arXiv API is accessible."""
         try:
-            # Simple health check - try a minimal query
-            response = await self.http_client.get(
+            response = await self._http_client.get(
                 f"{self.BASE_URL}?search_query=cat:cs.LG&max_results=1",
                 timeout=10.0,
             )
@@ -515,11 +508,7 @@ class ArxivAPIClient:
             return False
     
     def get_stats(self) -> Dict[str, Any]:
-        """Get client statistics.
-        
-        Returns:
-            Dict with request/cache stats
-        """
+        """Get client statistics."""
         return {
             "request_count": self._request_count,
             "error_count": self._error_count,
@@ -538,3 +527,56 @@ class ArxivAPIClient:
             f"cache_hits={self._cache_hit_count})"
         )
 
+
+class DefaultRateLimiter:
+    """Simple rate limiter implementation for when no external one is available."""
+    
+    def __init__(self, rate: float = 0.333):
+        import asyncio
+        import time
+        
+        self.rate = rate
+        self.capacity = 1
+        self.tokens = self.capacity
+        self.last_update = time.monotonic()
+        self._lock = asyncio.Lock()
+    
+    async def acquire(self) -> None:
+        """Acquire permission to make a request."""
+        async with self._lock:
+            import time
+            now = time.monotonic()
+            elapsed = now - self.last_update
+            
+            self.tokens = min(
+                self.capacity,
+                self.tokens + elapsed * self.rate
+            )
+            self.last_update = now
+            
+            if self.tokens >= 1:
+                self.tokens -= 1
+                return
+            
+            wait_time = (1 - self.tokens) / self.rate
+        
+        import asyncio
+        await asyncio.sleep(wait_time)
+    
+    async def get_delay(self) -> float:
+        """Get delay until next request."""
+        async with self._lock:
+            import time
+            now = time.monotonic()
+            elapsed = now - self.last_update
+            
+            self.tokens = min(
+                self.capacity,
+                self.tokens + elapsed * self.rate
+            )
+            self.last_update = now
+            
+            if self.tokens >= 1:
+                return 0.0
+            
+            return (1 - self.tokens) / self.rate

@@ -1,17 +1,13 @@
-"""Message publisher for arXiv fetcher.
+"""Refactored message publisher for arXiv fetcher.
 
-Integrates with existing MessagePublisher from src/shared/messaging/
-Publishes to arxiv.discovered and arxiv.parse_request queues.
+Uses injectable message publisher for testability.
 """
 import asyncio
 import logging
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from src.shared.messaging.publisher import MessagePublisher, get_publisher
-from src.shared.messaging.schemas import BaseMessage
-from src.shared.models.source import SourceType
-
+from src.shared.interfaces import IMessagePublisher
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
 from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, ParsedContent
 from src.services.fetchers.arxiv.schemas.messages import (
@@ -26,34 +22,57 @@ logger = logging.getLogger(__name__)
 
 
 class ArxivMessagePublisher:
-    """Publisher for arXiv paper messages.
+    """Publisher for arXiv paper messages with injectable dependencies.
     
-    Uses existing MessagePublisher from src/shared/messaging/publisher.py
     Publishes to:
     - arxiv.discovered: Papers with metadata only
     - arxiv.parse_request: Parse requests from intelligence layer
     - content.extracted: Fully extracted paper content
     
+    All dependencies are injected through the constructor.
+    
+    Example:
+        # Production use with real publisher
+        from src.shared.messaging.publisher import MessagePublisher
+        from src.shared.messaging.connection import RabbitMQConnection
+        
+        connection = RabbitMQConnection(connection_string="amqp://localhost:5672/")
+        publisher = MessagePublisher(connection=connection)
+        
+        arxiv_publisher = ArxivMessagePublisher(
+            message_publisher=publisher,
+            config=config,
+        )
+        
+        # Testing use with mocks
+        from src.shared.testing.mocks import MockMessagePublisher
+        
+        arxiv_publisher = ArxivMessagePublisher(
+            message_publisher=MockMessagePublisher(),
+            config=config,
+        )
+        
+        # Use publisher
+        await arxiv_publisher.publish_discovered(papers=[paper])
+    
     Attributes:
-        publisher: Existing MessagePublisher instance
+        message_publisher: IMessagePublisher for actual publishing
         config: ArXiv fetcher configuration
-        discovered_queue: Queue for discovered papers
-        parse_request_queue: Queue for parse requests
-        extracted_queue: Queue for extracted content
+        _initialized: Whether the service has been initialized
     """
     
     def __init__(
         self,
-        publisher: Optional[MessagePublisher] = None,
+        message_publisher: Optional[IMessagePublisher] = None,
         config: Optional[ArxivFetcherConfig] = None,
     ):
         """Initialize message publisher.
         
         Args:
-            publisher: Existing MessagePublisher instance
+            message_publisher: IMessagePublisher for actual publishing
             config: ArXiv fetcher configuration
         """
-        self.publisher = publisher
+        self._publisher = message_publisher
         self.config = config or ArxivFetcherConfig()
         self._initialized = False
         
@@ -70,9 +89,12 @@ class ArxivMessagePublisher:
         """Initialize publisher connection."""
         if self._initialized:
             return
-            
-        if self.publisher is None:
-            self.publisher = await get_publisher()
+        
+        if self._publisher is None:
+            raise MessagePublishingError(
+                "No message publisher provided. "
+                "Inject an IMessagePublisher (e.g., MockMessagePublisher) for testing."
+            )
         
         self._initialized = True
         logger.info(
@@ -103,13 +125,17 @@ class ArxivMessagePublisher:
         if not papers:
             return 0
         
+        if self._publisher is None:
+            logger.warning("No message publisher, skipping publish")
+            return 0
+        
         published = 0
         
         for paper in papers:
             try:
                 message = self._build_discovered_message(paper, correlation_id)
                 
-                await self.publisher.publish(
+                await self._publisher.publish(
                     message=message,
                     routing_key=self.discovered_queue,
                 )
@@ -158,6 +184,10 @@ class ArxivMessagePublisher:
         if not self._initialized:
             await self.initialize()
         
+        if self._publisher is None:
+            logger.warning("No message publisher, skipping publish")
+            return
+        
         try:
             message = ArxivParseRequestMessage(
                 correlation_id=correlation_id,
@@ -169,7 +199,7 @@ class ArxivMessagePublisher:
                 intelligence_notes=intelligence_notes,
             )
             
-            await self.publisher.publish(
+            await self._publisher.publish(
                 message=message,
                 routing_key=self.parse_request_queue,
             )
@@ -210,6 +240,10 @@ class ArxivMessagePublisher:
         if not self._initialized:
             await self.initialize()
         
+        if self._publisher is None:
+            logger.warning("No message publisher, skipping publish")
+            return
+        
         try:
             message = ArxivExtractedMessage(
                 correlation_id=parse_correlation_id,
@@ -232,7 +266,7 @@ class ArxivMessagePublisher:
                 extraction_metadata=content.metadata,
             )
             
-            await self.publisher.publish(
+            await self._publisher.publish(
                 message=message,
                 routing_key=self.extracted_queue,
             )
@@ -292,15 +326,7 @@ class ArxivMessagePublisher:
         paper: PaperMetadata,
         correlation_id: Optional[str] = None,
     ) -> ArxivDiscoveredMessage:
-        """Build discovered message from paper metadata.
-        
-        Args:
-            paper: Paper metadata
-            correlation_id: Optional correlation ID
-            
-        Returns:
-            ArxivDiscoveredMessage
-        """
+        """Build discovered message from paper metadata."""
         return ArxivDiscoveredMessage(
             correlation_id=correlation_id or paper.paper_id,
             paper_id=paper.paper_id,
@@ -321,16 +347,12 @@ class ArxivMessagePublisher:
         )
     
     async def health_check(self) -> bool:
-        """Check if publisher is healthy.
-        
-        Returns:
-            True if healthy, False otherwise
-        """
-        if not self._initialized or self.publisher is None:
+        """Check if publisher is healthy."""
+        if not self._initialized or self._publisher is None:
             return False
         
         try:
-            return await self.publisher.health_check()
+            return await self._publisher.health_check()
         except Exception as e:
             logger.warning(f"Publisher health check failed: {e}")
             return False
@@ -338,14 +360,12 @@ class ArxivMessagePublisher:
     async def close(self) -> None:
         """Close publisher connection."""
         self._initialized = False
+        if self._publisher:
+            await self._publisher.close()
         logger.info("ArxivMessagePublisher closed")
     
     def get_stats(self) -> Dict[str, Any]:
-        """Get publisher statistics.
-        
-        Returns:
-            Dict with publishing stats
-        """
+        """Get publisher statistics."""
         return {
             "published_count": self._published_count,
             "error_count": self._error_count,
@@ -360,10 +380,14 @@ class ArxivMessagePublisher:
             },
         }
     
+    @property
+    def publisher(self) -> Optional[IMessagePublisher]:
+        """Get the underlying publisher (for testing)."""
+        return self._publisher
+    
     def __repr__(self) -> str:
         return (
             f"ArxivMessagePublisher("
             f"published={self._published_count}, "
             f"errors={self._error_count})"
         )
-

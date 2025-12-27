@@ -1,10 +1,12 @@
-"""Main arXiv fetcher orchestrator.
+"""Main arXiv fetcher orchestrator with dependency injection.
 
 Coordinates all components for paper discovery:
 - Query expansion (LLM)
 - API calls (arXiv API)
 - Caching (Redis)
 - Publishing (RabbitMQ)
+
+All dependencies are injected through the constructor.
 """
 import asyncio
 import logging
@@ -12,6 +14,11 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 from uuid import uuid4
 
+from src.shared.interfaces import (
+    ICacheBackend,
+    IMessagePublisher,
+    ILLMRouter,
+)
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
 from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, PaperSource
 from src.services.fetchers.arxiv.services.cache_manager import CacheManager
@@ -19,34 +26,72 @@ from src.services.fetchers.arxiv.services.query_processor import QueryProcessor
 from src.services.fetchers.arxiv.services.api_client import ArxivAPIClient
 from src.services.fetchers.arxiv.services.publisher import ArxivMessagePublisher
 from src.services.fetchers.arxiv.services.pdf_processor import PDFProcessor
-from src.services.fetchers.arxiv.utils.rate_limiter import RateLimiter
 
 
 logger = logging.getLogger(__name__)
 
 
 class ArxivFetcher:
-    """Main arXiv fetcher orchestrator.
+    """Main arXiv fetcher orchestrator with injectable dependencies.
     
     Coordinates all components for paper discovery:
     - Query expansion (LLM)
     - API calls (arXiv API)
-    - Caching (Redis)
-    - Publishing (RabbitMQ)
+    - Caching (optional)
+    - Publishing (optional)
+    
+    All dependencies are injected through the constructor.
+    No internal creation of external services.
+    
+    Example:
+        # Production use with real dependencies
+        fetcher = ArxivFetcher(
+            config=config,
+            cache=cache_backend,
+            query_processor=query_processor,
+            api_client=api_client,
+            publisher=publisher,
+            pdf_processor=pdf_processor,
+        )
+        await fetcher.initialize()
+        
+        # Testing use with mocks
+        from src.shared.testing.mocks import (
+            InMemoryCacheBackend,
+            MockLLMRouter,
+            MockMessagePublisher,
+        )
+        
+        fetcher = ArxivFetcher(
+            config=ArxivFetcherConfig(),
+            cache=InMemoryCacheBackend(),
+            query_processor=QueryProcessor(llm_router=MockLLMRouter()),
+            api_client=ArxivAPIClient(),  # Uses mocks internally
+            publisher=ArxivMessagePublisher(
+                message_publisher=MockMessagePublisher()
+            ),
+        )
+        
+        # Use fetcher
+        results = await fetcher.run_discovery(
+            queries=["transformer attention"],
+            categories=["cs.LG"],
+        )
     
     Attributes:
         config: ArXiv fetcher configuration
-        cache: Cache manager
+        cache: Cache backend (ICacheBackend)
         query_processor: Query processor
         api_client: arXiv API client
         publisher: Message publisher
         pdf_processor: PDF processor
+        _initialized: Whether the service has been initialized
     """
     
     def __init__(
         self,
         config: Optional[ArxivFetcherConfig] = None,
-        cache: Optional[CacheManager] = None,
+        cache: Optional[ICacheBackend] = None,
         query_processor: Optional[QueryProcessor] = None,
         api_client: Optional[ArxivAPIClient] = None,
         publisher: Optional[ArxivMessagePublisher] = None,
@@ -56,7 +101,7 @@ class ArxivFetcher:
         
         Args:
             config: ArXiv fetcher configuration
-            cache: Cache manager
+            cache: Cache backend (ICacheBackend)
             query_processor: Query processor
             api_client: arXiv API client
             publisher: Message publisher
@@ -76,50 +121,48 @@ class ArxivFetcher:
         self._papers_discovered = 0
         self._papers_published = 0
         self._queries_processed = 0
-        self._errors = []
+        self._errors: List[Dict[str, Any]] = []
     
     async def initialize(self) -> None:
         """Initialize all components.
         
-        Creates missing components with default implementations.
+        Validates that required dependencies are set.
+        No auto-creation of dependencies - they must be injected.
+        
+        Raises:
+            ValueError: If required dependencies are missing
         """
         if self._initialized:
             return
         
-        logger.info("Initializing ArxivFetcher...")
-        
-        # Initialize cache
-        if self.cache is None:
-            self.cache = CacheManager(config=self.config)
-        await self.cache.initialize()
-        
-        # Initialize query processor
-        if self.query_processor is None:
-            self.query_processor = QueryProcessor(
-                cache_manager=self.cache,
-                config=self.config,
-            )
-        await self.query_processor.initialize()
-        
-        # Initialize API client
+        # Validate required dependencies
         if self.api_client is None:
-            self.api_client = ArxivAPIClient(
-                config=self.config,
-                cache=self.cache,
+            raise ValueError(
+                "api_client is required. "
+                "Inject an ArxivAPIClient instance."
             )
+        
+        # Initialize components that have initialization methods
+        if self.cache is not None:
+            cache_manager = CacheManager(
+                cache_backend=self.cache,
+                config=self.config,
+            )
+            await cache_manager.initialize()
+            self._cache_manager = cache_manager
+        else:
+            self._cache_manager = None
+        
+        if self.query_processor is not None:
+            await self.query_processor.initialize()
+        
         await self.api_client.initialize()
         
-        # Initialize publisher
-        if self.publisher is None:
-            self.publisher = ArxivMessagePublisher(config=self.config)
-        await self.publisher.initialize()
+        if self.publisher is not None:
+            await self.publisher.initialize()
         
-        # Initialize PDF processor (for on-demand parsing)
-        if self.pdf_processor is None:
-            self.pdf_processor = PDFProcessor(
-                cache_manager=self.cache,
-                config=self.config,
-            )
+        if self.pdf_processor is not None:
+            pass  # PDFProcessor doesn't have async init
         
         self._initialized = True
         logger.info("ArxivFetcher initialized successfully")
@@ -165,12 +208,14 @@ class ArxivFetcher:
         unique_papers = self._deduplicate_papers(all_papers)
         
         # Publish to queue
-        if unique_papers:
+        if unique_papers and self.publisher is not None:
             published = await self.publisher.publish_discovered(
                 papers=unique_papers,
                 correlation_id=run_correlation_id,
             )
             self._papers_published = published
+        else:
+            self._papers_published = 0
         
         self._papers_discovered = len(unique_papers)
         
@@ -194,24 +239,23 @@ class ArxivFetcher:
         return results
     
     async def _process_queries(self, queries: List[str]) -> List[PaperMetadata]:
-        """Process queries and fetch papers.
-        
-        Args:
-            queries: List of search queries
-            
-        Returns:
-            List of PaperMetadata
-        """
+        """Process queries and fetch papers."""
         all_papers = []
         
         for query in queries:
             try:
-                # Expand query using LLM
-                expansion = await self.query_processor.expand_query(query)
-                self._queries_processed += 1
+                # Expand query using LLM (if query processor available)
+                if self.query_processor is not None:
+                    expansion = await self.query_processor.expand_query(query)
+                    self._queries_processed += 1
+                    expanded_queries = expansion.expanded_queries
+                else:
+                    # No query processor, use original query
+                    expanded_queries = [query]
+                    self._queries_processed += 1
                 
                 # Execute searches
-                for expanded_query in expansion.expanded_queries:
+                for expanded_query in expanded_queries:
                     papers = await self.api_client.search(
                         query=expanded_query,
                         max_results=self.config.default_results_per_query,
@@ -244,14 +288,7 @@ class ArxivFetcher:
         self,
         categories: List[str],
     ) -> List[PaperMetadata]:
-        """Fetch papers from categories.
-        
-        Args:
-            categories: List of arXiv categories
-            
-        Returns:
-            List of PaperMetadata
-        """
+        """Fetch papers from categories."""
         try:
             papers = await self.api_client.fetch_by_categories(
                 categories=categories,
@@ -274,19 +311,12 @@ class ArxivFetcher:
         self,
         papers: List[PaperMetadata],
     ) -> List[PaperMetadata]:
-        """Remove duplicate papers by ID.
-        
-        Args:
-            papers: List of papers
-            
-        Returns:
-            Deduplicated list
-        """
+        """Remove duplicate papers by ID."""
         seen = set()
         unique = []
         
         for paper in papers:
-            if paper.paper_id not in seen:
+            if paper.paper_id and paper.paper_id not in seen:
                 seen.add(paper.paper_id)
                 unique.append(paper)
         
@@ -304,17 +334,13 @@ class ArxivFetcher:
         original_correlation_id: str,
         **kwargs,
     ) -> None:
-        """Handle on-demand parse request.
-        
-        Args:
-            paper_id: arXiv ID to parse
-            pdf_url: URL to PDF
-            correlation_id: Correlation ID for this request
-            original_correlation_id: Original discovery correlation
-            **kwargs: Additional parameters (relevance_score, etc.)
-        """
+        """Handle on-demand parse request."""
         if not self._initialized:
             await self.initialize()
+        
+        if self.pdf_processor is None or self.publisher is None:
+            logger.warning("PDF processor or publisher not available, skipping parse request")
+            return
         
         try:
             # Extract content from PDF
@@ -323,7 +349,7 @@ class ArxivFetcher:
                 paper_id=paper_id,
             )
             
-            # Get paper metadata (we need to fetch it)
+            # Get paper metadata
             papers = await self.api_client.fetch_by_ids([paper_id])
             if not papers:
                 logger.error(f"Paper not found: {paper_id}")
@@ -350,15 +376,11 @@ class ArxivFetcher:
             })
     
     async def health_check(self) -> Dict[str, bool]:
-        """Check health of all components.
-        
-        Returns:
-            Dict mapping component name to health status
-        """
+        """Check health of all components."""
         health = {}
         
-        if self.cache:
-            health["cache"] = await self.cache.health_check()
+        if self._cache_manager:
+            health["cache"] = await self._cache_manager.health_check()
         
         if self.query_processor:
             health["query_processor"] = await self.query_processor.health_check()
@@ -376,8 +398,8 @@ class ArxivFetcher:
     
     async def close(self) -> None:
         """Clean up all resources."""
-        if self.cache:
-            await self.cache.close()
+        if self._cache_manager:
+            await self._cache_manager.close()
         
         if self.api_client:
             await self.api_client.close()
@@ -389,11 +411,7 @@ class ArxivFetcher:
         logger.info("ArxivFetcher closed")
     
     def get_stats(self) -> Dict[str, Any]:
-        """Get fetcher statistics.
-        
-        Returns:
-            Dict with all statistics
-        """
+        """Get fetcher statistics."""
         stats = {
             "papers_discovered": self._papers_discovered,
             "papers_published": self._papers_published,
@@ -403,9 +421,6 @@ class ArxivFetcher:
         }
         
         # Add component stats
-        if self.cache:
-            stats["cache"] = self.cache.get_stats()
-        
         if self.api_client:
             stats["api_client"] = self.api_client.get_stats()
         
@@ -417,6 +432,11 @@ class ArxivFetcher:
         
         return stats
     
+    @property
+    def is_initialized(self) -> bool:
+        """Check if fetcher is initialized."""
+        return self._initialized
+    
     def __repr__(self) -> str:
         return (
             f"ArxivFetcher("
@@ -425,3 +445,91 @@ class ArxivFetcher:
             f"published={self._papers_published})"
         )
 
+
+class ArxivFetcherFactory:
+    """Factory for creating ArxivFetcher instances."""
+    
+    @staticmethod
+    def create_full(
+        config: Optional[ArxivFetcherConfig] = None,
+        cache_backend: Optional[ICacheBackend] = None,
+        llm_router: Optional[ILLMRouter] = None,
+        message_publisher: Optional[IMessagePublisher] = None,
+    ) -> ArxivFetcher:
+        """Create ArxivFetcher with all dependencies.
+        
+        Args:
+            config: ArXiv fetcher configuration
+            cache_backend: Cache backend (ICacheBackend)
+            llm_router: LLM router for query expansion
+            message_publisher: Message publisher
+            
+        Returns:
+            Configured ArxivFetcher instance
+        """
+        # Create cache manager
+        if cache_backend is not None:
+            cache_manager = CacheManager(
+                cache_backend=cache_backend,
+                config=config,
+            )
+        else:
+            cache_manager = None
+        
+        # Create query processor
+        query_processor = QueryProcessor(
+            llm_router=llm_router,
+            cache_manager=cache_manager,
+            config=config,
+        )
+        
+        # Create API client
+        api_client = ArxivAPIClient(
+            cache=cache_manager,
+            config=config,
+        )
+        
+        # Create arXiv publisher
+        arxiv_publisher = ArxivMessagePublisher(
+            message_publisher=message_publisher,
+            config=config,
+        )
+        
+        # Create fetcher
+        return ArxivFetcher(
+            config=config,
+            cache=cache_backend,
+            query_processor=query_processor,
+            api_client=api_client,
+            publisher=arxiv_publisher,
+        )
+    
+    @staticmethod
+    def create_for_testing() -> ArxivFetcher:
+        """Create ArxivFetcher with all mocks for testing.
+        
+        Returns:
+            ArxivFetcher with mock dependencies
+        """
+        from src.shared.testing.mocks import (
+            InMemoryCacheBackend,
+            MockLLMRouter,
+            MockMessagePublisher,
+        )
+        
+        cache_backend = InMemoryCacheBackend()
+        llm_router = MockLLMRouter()
+        message_publisher = MockMessagePublisher()
+        
+        return ArxivFetcherFactory.create_full(
+            config=ArxivFetcherConfig(),
+            cache_backend=cache_backend,
+            llm_router=llm_router,
+            message_publisher=message_publisher,
+        )
+
+
+__all__ = [
+    "ArxivFetcher",
+    "ArxivFetcherFactory",
+]

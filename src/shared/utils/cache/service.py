@@ -1,133 +1,115 @@
-"""Cache service - main cache interface."""
-import functools
-import logging
-from typing import Any, Callable, Dict, List, Optional
+"""Refactored cache service with dependency injection.
 
-from src.shared.utils.cache.connection import RedisConnection
-from src.shared.utils.cache.keys import (
-    build_cache_key,
-    build_hashed_cache_key,
-    validate_cache_key,
+This module provides a clean separation between cache interface and implementation.
+All dependencies are injected through the constructor for testability.
+"""
+import logging
+from typing import Any, Dict, List, Optional
+
+from src.shared.interfaces import (
+    ICacheBackend,
+    ISerializer,
 )
-from src.shared.utils.cache.serializers import JSONSerializer, Serializer, get_serializer
+from src.shared.utils.cache.keys import validate_cache_key
 
 
 logger = logging.getLogger(__name__)
 
 
-class CacheService:
-    """High-level cache service orchestrating Redis operations.
+class DefaultJSONSerializer:
+    """Default JSON serializer for cache values.
     
-    Provides:
-    - Simple get/set/delete operations
-    - Pattern-based key deletion
-    - Batch operations (get_many)
-    - Metrics collection
-    - Serialization/deserialization
+    Handles basic Python types that are JSON-serializable.
+    """
+    
+    def serialize(self, value: Any) -> bytes:
+        """Serialize value to JSON bytes."""
+        return json.dumps(value, default=str).encode('utf-8')
+    
+    def deserialize(self, data: bytes) -> Any:
+        """Deserialize JSON bytes to value."""
+        return json.loads(data.decode('utf-8'))
+
+
+# Import json for serializer
+import json
+
+
+class CacheService:
+    """High-level cache service with injectable dependencies.
+    
+    This is the main cache interface used by the application.
+    All dependencies are injected through the constructor.
     
     Example:
-        cache = CacheService(redis_url="redis://localhost:6379/0")
+        # Production use with Redis
+        backend = RedisCacheBackend(redis_url="redis://localhost:6379/0")
+        cache = CacheService(cache_backend=backend)
         await cache.initialize()
         
-        # Set value
+        # Testing use with in-memory cache
+        from src.shared.testing.mocks import InMemoryCacheBackend
+        cache = CacheService(cache_backend=InMemoryCacheBackend())
+        
+        # Use cache
         await cache.set_cached("key", {"data": "value"}, ttl=3600)
-        
-        # Get value
         value = await cache.get_cached("key")
-        
-        # Delete
-        await cache.delete("key")
-        
-        # Get metrics
-        stats = cache.get_stats()
+    
+    Attributes:
+        _backend: Cache backend implementation (ICacheBackend)
+        _serializer: Serializer for values (ISerializer)
+        _initialized: Whether the service has been initialized
     """
     
     def __init__(
         self,
-        redis_url: str = "redis://localhost:6379/0",
-        password: Optional[str] = None,
-        pool_size: int = 10,
-        serializer: Optional[Serializer] = None,
+        cache_backend: ICacheBackend,
+        serializer: Optional[ISerializer] = None,
     ):
         """Initialize cache service.
         
         Args:
-            redis_url: Redis connection URL
-            password: Optional Redis password
-            pool_size: Connection pool size
-            serializer: Serializer for cache values (default: JSONSerializer)
+            cache_backend: Cache backend implementation (Redis, memory, etc.)
+            serializer: Serializer for cache values (optional, default JSON)
         """
-        self.redis_url = redis_url
-        self.password = password
-        self.pool_size = pool_size
-        self.serializer = serializer or JSONSerializer()
-        
-        # Initialize connection and metrics
-        self.connection = RedisConnection(
-            redis_url=redis_url,
-            password=password,
-            pool_size=pool_size,
-        )
-        from src.shared.utils.cache.metrics import CacheMetrics
-        self.metrics = CacheMetrics()
-        
-        logger.info(
-            f"CacheService initialized",
-            extra={
-                "redis_url": redis_url,
-                "pool_size": pool_size,
-                "serializer_type": type(self.serializer).__name__,
-            },
-        )
+        self._backend = cache_backend
+        self._serializer = serializer or DefaultJSONSerializer()
+        self._initialized = False
     
     async def initialize(self) -> None:
-        """Initialize Redis connection pool.
+        """Initialize the cache backend.
         
-        Must be called before using cache operations.
+        Calls initialize on the backend if it has that method.
         """
-        logger.info("Initializing CacheService")
-        await self.connection.initialize()
-        logger.info("CacheService initialized successfully")
+        if hasattr(self._backend, 'initialize'):
+            await self._backend.initialize()
+        self._initialized = True
+        logger.info("CacheService initialized")
     
     async def get_cached(self, cache_key: str) -> Optional[Any]:
-        """Get value from cache.
-
+        """Get a value from cache.
+        
         Args:
             cache_key: Cache key to retrieve
-
+            
         Returns:
             Cached value or None if not found
-
-        Example:
-            value = await cache.get_cached("user:123:preferences")
-            if value is None:
-                print("Not cached")
         """
-        # Validate key
         validate_cache_key(cache_key)
-
+        
         try:
-            redis = await self.connection.get_connection()
-            data = await redis.get(cache_key)
-
+            data = await self._backend.get(cache_key)
+            
             if data is None:
-                self.metrics.record_miss(cache_key)
                 logger.debug(f"Cache miss: {cache_key}")
                 return None
-
-            # Deserialize
-            value = self.serializer.deserialize(data)
-            self.metrics.record_hit(cache_key)
+            
+            value = self._serializer.deserialize(data)
             logger.debug(f"Cache hit: {cache_key}")
             return value
-
+            
         except Exception as e:
-            logger.error(
-                f"Cache get failed for key {cache_key}: {e}",
-                extra={"cache_key": cache_key, "error": str(e)},
-                exc_info=True,
-            )
-            self.metrics.record_miss(cache_key)
+            logger.error(f"Cache get failed for key {cache_key}: {e}", exc_info=True)
             return None
     
     async def set_cached(
@@ -136,238 +118,271 @@ class CacheService:
         value: Any,
         ttl: Optional[int] = None,
     ) -> None:
-        """Set value in cache.
-
+        """Set a value in cache.
+        
         Args:
             cache_key: Cache key to store
             value: Value to cache
             ttl: Time-to-live in seconds (None = no expiration)
-
-        Example:
-            await cache.set_cached("user:123:preferences", {"theme": "dark"}, ttl=3600)
         """
-        # Validate key
         validate_cache_key(cache_key)
-
-        # Skip None values
+        
         if value is None:
             logger.debug(f"Skipping cache set for None value: {cache_key}")
             return
-
+        
         try:
-            # Serialize value
-            serialized = self.serializer.serialize(value)
-
-            # Set in Redis
-            redis = await self.connection.get_connection()
-            await redis.set(cache_key, serialized, ex=ttl)
-
-            # Record metrics
-            self.metrics.record_size(len(serialized))
-            logger.debug(
-                f"Set cache key: {cache_key}, TTL: {ttl}, Size: {len(serialized)} bytes"
-            )
-
+            serialized = self._serializer.serialize(value)
+            await self._backend.set(cache_key, serialized, ttl_seconds=ttl)
+            logger.debug(f"Set cache key: {cache_key}, TTL: {ttl}")
+            
         except Exception as e:
-            logger.error(
-                f"Cache set failed for key {cache_key}: {e}",
-                extra={"cache_key": cache_key, "error": str(e)},
-                exc_info=True,
-            )
+            logger.error(f"Cache set failed for key {cache_key}: {e}", exc_info=True)
             raise
     
     async def delete(self, cache_key: str) -> None:
-        """Delete value from cache.
-
+        """Delete a value from cache.
+        
         Args:
             cache_key: Cache key to delete
-
-        Example:
-            await cache.delete("user:123:preferences")
         """
         validate_cache_key(cache_key)
-
+        
         try:
-            redis = await self.connection.get_connection()
-            await redis.delete(cache_key)
+            await self._backend.delete(cache_key)
             logger.debug(f"Deleted cache key: {cache_key}")
-
+            
         except Exception as e:
-            logger.error(
-                f"Cache delete failed for key {cache_key}: {e}",
-                extra={"cache_key": cache_key, "error": str(e)},
-                exc_info=True,
-            )
+            logger.error(f"Cache delete failed for key {cache_key}: {e}", exc_info=True)
     
     async def delete_pattern(self, pattern: str) -> None:
-        """Delete all keys matching pattern.
-
+        """Delete all keys matching a pattern.
+        
         Args:
             pattern: Key pattern (e.g., "cache:llm:*")
-
-        Example:
-            await cache.delete_pattern("cache:llm:*")  # Invalidates all LLM cache
         """
         try:
-            redis = await self.connection.get_connection()
-
-            # Use SCAN for production safety (non-blocking)
-            keys = []
-            async for key in redis.scan_iter(match=pattern, count=100):
-                keys.append(key)
-
-            if keys:
-                await redis.delete(*keys)
-                logger.info(f"Deleted {len(keys)} keys matching pattern: {pattern}")
-            else:
-                logger.debug(f"No keys found matching pattern: {pattern}")
-
+            await self._backend.delete_pattern(pattern)
+            logger.info(f"Deleted keys matching pattern: {pattern}")
+            
         except Exception as e:
-            logger.error(
-                f"Cache delete pattern failed for {pattern}: {e}",
-                extra={"pattern": pattern, "error": str(e)},
-                exc_info=True,
-            )
+            logger.error(f"Cache delete pattern failed for {pattern}: {e}", exc_info=True)
     
     async def get_many(self, cache_keys: List[str]) -> Dict[str, Any]:
-        """Get multiple values from cache efficiently.
-
+        """Get multiple values from cache.
+        
         Args:
             cache_keys: List of cache keys
-
+            
         Returns:
             Dict of key -> value (missing keys not included)
-
-        Example:
-            values = await cache.get_many([
-                "user:123:preferences",
-                "user:456:preferences",
-                "config:llm",
-            ])
         """
         if not cache_keys:
             return {}
-
-        # Remove duplicates
-        unique_keys = list(set(cache_keys))
-
-        logger.debug(f"Getting {len(unique_keys)} cache keys")
-
-        results = {}
-
+        
         try:
-            redis = await self.connection.get_connection()
-            values = await redis.mget(unique_keys)
-
-            for key, data in zip(unique_keys, values):
-                if data is not None:
-                    results[key] = self.serializer.deserialize(data)
-                    self.metrics.record_hit(key)
-                else:
-                    self.metrics.record_miss(key)
-
-            logger.debug(f"Cache get_many: {len(results)}/{len(unique_keys)} hits")
-            return results
-
+            results = await self._backend.get_many(cache_keys)
+            return {
+                k: self._serializer.deserialize(v)
+                for k, v in results.items()
+            }
+            
         except Exception as e:
-            logger.error(
-                f"Cache get_many failed: {e}",
-                extra={
-                    "keys_count": len(cache_keys),
-                    "error": str(e),
-                },
-                exc_info=True,
-            )
-            # Return empty dict on error
+            logger.error(f"Cache get_many failed: {e}", exc_info=True)
             return {}
     
     async def exists(self, cache_key: str) -> bool:
-        """Check if key exists in cache.
-
+        """Check if a key exists in cache.
+        
         Args:
             cache_key: Cache key to check
-
+            
         Returns:
             True if key exists, False otherwise
         """
         validate_cache_key(cache_key)
-
+        
         try:
-            redis = await self.connection.get_connection()
-            exists = await redis.exists(cache_key)
-            return bool(exists)
-
+            return await self._backend.exists(cache_key)
+            
         except Exception as e:
-            logger.error(
-                f"Cache exists check failed for {cache_key}: {e}",
-                extra={"cache_key": cache_key, "error": str(e)},
-                exc_info=True,
-            )
+            logger.error(f"Cache exists check failed for {cache_key}: {e}", exc_info=True)
             return False
+    
+    async def close(self) -> None:
+        """Close cache service and backend connection."""
+        await self._backend.close()
+        self._initialized = False
+        logger.info("CacheService closed")
     
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics.
         
         Returns:
-            Dict with metrics from MetricsTracker
+            Dict with backend type information
         """
-        return self.metrics.get_stats()
+        return {
+            "backend_type": type(self._backend).__name__,
+            "initialized": self._initialized,
+        }
+    
+    @property
+    def backend(self) -> ICacheBackend:
+        """Get the underlying backend (for testing)."""
+        return self._backend
+
+
+class CacheServiceFactory:
+    """Factory for creating CacheService instances.
+    
+    Provides convenient methods for creating services with common configurations.
+    """
+    
+    @staticmethod
+    def create_redis(
+        redis_url: str = "redis://localhost:6379/0",
+        password: Optional[str] = None,
+        pool_size: int = 10,
+    ) -> CacheService:
+        """Create CacheService with Redis backend.
+        
+        Args:
+            redis_url: Redis connection URL
+            password: Optional Redis password
+            pool_size: Connection pool size
+            
+        Returns:
+            Configured CacheService with Redis backend
+        """
+        from src.shared.utils.cache.connection import RedisConnection
+        
+        connection = RedisConnection(
+            redis_url=redis_url,
+            password=password,
+            pool_size=pool_size,
+        )
+        
+        backend = RedisCacheBackend(connection=connection)
+        
+        return CacheService(cache_backend=backend)
+    
+    @staticmethod
+    def create_in_memory() -> CacheService:
+        """Create CacheService with in-memory backend.
+        
+        Useful for testing and development without Redis.
+        
+        Returns:
+            CacheService with InMemoryCacheBackend
+        """
+        from src.shared.testing.mocks import InMemoryCacheBackend
+        
+        backend = InMemoryCacheBackend()
+        
+        return CacheService(cache_backend=backend)
+    
+    @staticmethod
+    def create_from_backend(backend: ICacheBackend) -> CacheService:
+        """Create CacheService from existing backend.
+        
+        Args:
+            backend: ICacheBackend implementation
+            
+        Returns:
+            CacheService wrapping the provided backend
+        """
+        return CacheService(cache_backend=backend)
+
+
+class RedisCacheBackend:
+    """Redis cache backend implementation.
+    
+    Wraps Redis connection for use with CacheService.
+    
+    Attributes:
+        connection: Redis connection instance
+    """
+    
+    def __init__(self, connection: 'RedisConnection'):
+        """Initialize Redis backend.
+        
+        Args:
+            connection: Redis connection instance
+        """
+        self.connection = connection
+    
+    async def initialize(self) -> None:
+        """Initialize the Redis connection."""
+        await self.connection.initialize()
+    
+    async def get(self, key: str) -> Optional[bytes]:
+        """Get value from Redis."""
+        redis = await self.connection.get_connection()
+        data = await redis.get(key)
+        return data
+    
+    async def set(
+        self,
+        key: str,
+        value: bytes,
+        ttl_seconds: Optional[int] = None,
+    ) -> None:
+        """Set value in Redis."""
+        redis = await self.connection.get_connection()
+        await redis.set(key, value, ex=ttl_seconds)
+    
+    async def delete(self, key: str) -> None:
+        """Delete key from Redis."""
+        redis = await self.connection.get_connection()
+        await redis.delete(key)
+    
+    async def exists(self, key: str) -> bool:
+        """Check if key exists in Redis."""
+        redis = await self.connection.get_connection()
+        return await redis.exists(key)
+    
+    async def get_many(self, keys: List[str]) -> Dict[str, bytes]:
+        """Get multiple values from Redis."""
+        if not keys:
+            return {}
+        
+        redis = await self.connection.get_connection()
+        values = await redis.mget(keys)
+        
+        result = {}
+        for key, data in zip(keys, values):
+            if data is not None:
+                result[key] = data
+        
+        return result
+    
+    async def delete_pattern(self, pattern: str) -> None:
+        """Delete keys matching pattern from Redis."""
+        redis = await self.connection.get_connection()
+        
+        keys = []
+        async for key in redis.scan_iter(match=pattern, count=100):
+            keys.append(key)
+        
+        if keys:
+            await redis.delete(*keys)
     
     async def close(self) -> None:
-        """Close cache service and Redis connection."""
-        logger.info("Closing CacheService")
+        """Close the Redis connection."""
         await self.connection.close()
-        logger.info("CacheService closed")
     
-    def _attach_to_decorators(self, decorator: Callable) -> None:
-        """Attach cache service instance to decorated function.
-        
-        This allows decorators to access the cache service.
-        """
-        @functools.wraps(decorator)
-        def wrapper(*args, **kwargs):
-            # Store cache service in function attributes for decorator access
-            wrapper._cache_service = self
-            return decorator(*args, **kwargs)
-        
-        return wrapper
+    async def is_connected(self) -> bool:
+        """Check if connected to Redis."""
+        return await self.connection.is_connected()
 
 
-def get_cache_service(
-    redis_url: str = "redis://localhost:6379/0",
-    password: Optional[str] = None,
-    pool_size: int = 10,
-    serializer_type: str = "json",
-) -> CacheService:
-    """Factory function to create and initialize cache service.
-    
-    Args:
-        redis_url: Redis connection URL
-        password: Optional Redis password
-        pool_size: Connection pool size
-        serializer_type: Type of serializer ("json", "pickle", "string")
-    
-    Returns:
-        Initialized CacheService instance
-    
-    Example:
-        # Create and initialize
-        cache = get_cache_service(redis_url="redis://localhost:6379/0")
-        await cache.initialize()
-        
-        # Attach to decorators
-        @cached(ttl=3600, namespace="llm")
-        async def my_function():
-            # Now has access to cache via decorator
-            pass
-    """
-    # Create cache service
-    cache = CacheService(
-        redis_url=redis_url,
-        password=password,
-        pool_size=pool_size,
-        serializer=get_serializer(serializer_type),
-    )
-    
-    return cache
+# Remove the old global factory function
+# The new pattern uses explicit dependency injection
 
+
+__all__ = [
+    "CacheService",
+    "CacheServiceFactory",
+    "RedisCacheBackend",
+    "DefaultJSONSerializer",
+]
