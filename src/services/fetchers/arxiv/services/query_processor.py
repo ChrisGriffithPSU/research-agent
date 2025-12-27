@@ -11,6 +11,7 @@ from src.shared.interfaces import ILLMRouter, LLMResponse
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
 from src.services.fetchers.arxiv.schemas.paper import QueryExpansion
 from src.services.fetchers.arxiv.exceptions import LLMError, QueryProcessingError
+from src.services.fetchers.arxiv.services.cache_manager import CacheManager
 
 
 logger = logging.getLogger(__name__)
@@ -86,7 +87,7 @@ Now generate {max_expansions} queries for: "{query}"
     def __init__(
         self,
         llm_router: Optional[ILLMRouter] = None,
-        cache_manager: Optional['CacheManager'] = None,
+        cache_manager: Optional[CacheManager] = None,
         config: Optional[ArxivFetcherConfig] = None,
     ):
         """Initialize query processor.
