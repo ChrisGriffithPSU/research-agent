@@ -1,4 +1,5 @@
 """Cache decorator for automatic function result caching."""
+import functools
 import hashlib
 import inspect
 import logging

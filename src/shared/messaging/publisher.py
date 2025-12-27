@@ -4,7 +4,10 @@ Provides a clean interface for message publishing with injectable dependencies.
 """
 import asyncio
 import logging
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
+
+if TYPE_CHECKING:
+    from src.shared.testing.mocks import MockMessageConnection, MockMessagePublisher
 
 from src.shared.interfaces import (
     IMessageConnection,
@@ -95,7 +98,7 @@ class MessagePublisher:
             ConnectionError: If not connected to broker
             PublishError: If publish fails after all retries
         """
-        if not self._connection.is_connected():
+        if not self._connection.is_connected:
             raise MessagingConnectionError("Not connected to message broker. Call connection.connect() first.")
         
         # Serialize message
@@ -305,8 +308,8 @@ class MessagePublisherFactory:
         Returns:
             MockMessagePublisher instance
         """
-        from src.shared.testing.mocks import MockMessagePublisher
-        
+        from src.shared.testing.mocks import MockMessageConnection, MockMessagePublisher
+
         return MockMessagePublisher(connection=connection)
 
 
@@ -346,10 +349,6 @@ class PublishError(Exception):
         self.message = message
         self.original = original
         super().__init__(message)
-
-
-# Remove the old global singleton and get_publisher function
-# The new pattern uses explicit dependency injection
 
 
 __all__ = [

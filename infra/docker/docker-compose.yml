@@ -6,6 +6,7 @@ networks:
 
 volumes:
   postgres-data:
+  redis-data:
   rabbitmq-data:
   airflow-logs:
   model-weights:
@@ -28,6 +29,22 @@ services:
       - researcher-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: researcher-redis
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - researcher-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5

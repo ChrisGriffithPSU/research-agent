@@ -15,14 +15,14 @@ from src.shared.utils.cache.serializers import (
     StringSerializer,
     get_serializer,
 )  # noqa: F401
-from src.shared.utils.cache.decorators import cached, cached_with_key  # noqa: F401
+from src.shared.utils.cache.decorator import cached, cached_with_key  # noqa: F401
 from src.shared.utils.cache.metrics import (
     CacheMetrics,
     MetricsTracker,
     SlidingWindowCacheMetrics,
     get_metrics,
 )  # noqa: F401
-from src.shared.utils.cache.service import CacheService, get_cache_service  # noqa: F401
+from src.shared.utils.cache.service import CacheService, CacheServiceFactory  # noqa: F401
 
 __all__ = [
     # Connection management
@@ -49,6 +49,6 @@ __all__ = [
     "cached_with_key",
     # Service
     "CacheService",
-    "get_cache_service",
+    "CacheServiceFactory",
 ]
 

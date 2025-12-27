@@ -221,11 +221,18 @@ class QueueSetup:
         channel = self._connection.channel
 
         try:
-            await channel.queue_bind(
-                queue=queue_name.value,
-                exchange=EXCHANGE_NAME,
-                routing_key=routing_key,
+            # Get existing queue (passive=True means don't create, just get)
+            queue = await channel.declare_queue(
+                name=queue_name.value,
+                passive=True,
             )
+            # Get existing exchange
+            exchange = await channel.declare_exchange(
+                name=EXCHANGE_NAME,
+                passive=True,
+            )
+            # Bind queue to exchange with routing key
+            await queue.bind(exchange, routing_key=routing_key)
             logger.debug(f"Bound queue {queue_name.value} to {routing_key}")
         except Exception as e:
             logger.error(

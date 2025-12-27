@@ -120,8 +120,8 @@ class PickleSerializer(Serializer):
 
 
 class StringSerializer(Serializer):
-    """Simple string serializer for text values."""
-    
+    """Simple string serializer for text values.
+
     Useful for caching simple strings without JSON overhead.
     """
     

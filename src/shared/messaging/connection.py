@@ -169,7 +169,7 @@ class RabbitMQConnection:
                 "message_count": queue_info.method.message_count,
                 "consumer_count": queue_info.method.consumer_count,
             }
-        except aio_pika.exceptions.ChannelClosedByBroker as e:
+        except aio_pika.exceptions.ChannelClosed as e:
             if e.reply_code == 404:  # NOT_FOUND
                 logger.debug(f"Queue {queue_name} does not exist")
                 return None
