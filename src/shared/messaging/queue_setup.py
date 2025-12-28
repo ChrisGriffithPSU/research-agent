@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 EXCHANGE_NAME = "researcher"
 DLQ_EXCHANGE_NAME = "researcher.dlq"
 
+# Alternate exchange for unroutable messages
+ALTERNATE_EXCHANGE_NAME = "researcher.ae"
+ALTERNATE_EXCHANGE_DLQ_NAME = "researcher.ae.dlq"
+
 
 class QueueSetup:
     """Queue and exchange declaration and configuration.
@@ -39,6 +43,8 @@ class QueueSetup:
 
         This should be called once during service startup.
         """
+        await self._declare_alternate_exchange()
+        await self._declare_alternate_exchange_dlq()
         await self._declare_exchange()
         await self._declare_dlq_exchange()
         await self._declare_all_queues()
@@ -46,16 +52,55 @@ class QueueSetup:
 
         logger.info("All queues, exchanges, and bindings declared successfully")
 
+    async def _declare_alternate_exchange(self) -> None:
+        """Declare alternate exchange for unroutable messages.
+
+        The alternate exchange receives messages that cannot be routed
+        to any queue. Messages are then forwarded to the AE DLQ.
+        """
+        channel = self._connection.channel
+        try:
+            await channel.declare_exchange(
+                name=ALTERNATE_EXCHANGE_NAME,
+                type="direct",
+                durable=True,
+            )
+            logger.info(f"Declared alternate exchange: {ALTERNATE_EXCHANGE_NAME}")
+        except Exception as e:
+            logger.error(f"Failed to declare alternate exchange {ALTERNATE_EXCHANGE_NAME}: {e}")
+            raise QueueError(f"Failed to declare alternate exchange {ALTERNATE_EXCHANGE_NAME}", original=e) from e
+
+    async def _declare_alternate_exchange_dlq(self) -> None:
+        """Declare DLQ for the alternate exchange.
+
+        This queue receives all messages that cannot be routed to any
+        main queue. Messages here indicate a routing configuration issue.
+        """
+        channel = self._connection.channel
+        try:
+            await channel.declare_queue(
+                name=ALTERNATE_EXCHANGE_DLQ_NAME,
+                durable=True,
+            )
+            logger.info(f"Declared alternate exchange DLQ: {ALTERNATE_EXCHANGE_DLQ_NAME}")
+        except Exception as e:
+            logger.error(f"Failed to declare AE DLQ {ALTERNATE_EXCHANGE_DLQ_NAME}: {e}")
+            raise QueueError(f"Failed to declare AE DLQ {ALTERNATE_EXCHANGE_DLQ_NAME}", original=e) from e
+
     async def _declare_exchange(self) -> None:
-        """Declare topic exchange."""
+        """Declare topic exchange with alternate exchange for unroutable messages."""
         channel = self._connection.channel
         try:
             await channel.declare_exchange(
                 name=EXCHANGE_NAME,
                 type="topic",  # Topic exchange for flexible routing
                 durable=True,  # Persist across RabbitMQ restarts
+                arguments={
+                    # Configure alternate exchange for unroutable messages
+                    "x-alternate-exchange": ALTERNATE_EXCHANGE_NAME,
+                },
             )
-            logger.info(f"Declared topic exchange: {EXCHANGE_NAME}")
+            logger.info(f"Declared topic exchange: {EXCHANGE_NAME} with AE: {ALTERNATE_EXCHANGE_NAME}")
         except Exception as e:
             logger.error(f"Failed to declare exchange {EXCHANGE_NAME}: {e}")
             raise QueueError(f"Failed to declare exchange {EXCHANGE_NAME}", original=e) from e
@@ -194,7 +239,7 @@ class QueueSetup:
             raise QueueError(f"Failed to declare queue {queue_name.value}", original=e) from e
 
     async def _bind_all_queues(self) -> None:
-        """Bind main queues to topic exchange."""
+        """Bind main queues to topic exchange and AE DLQ to AE."""
         from src.shared.messaging.config import messaging_config
 
         # Queue to routing key mappings
@@ -210,6 +255,9 @@ class QueueSetup:
         # Bind each main queue (not DLQs)
         for queue_name, routing_key in bindings.items():
             await self._bind_queue(queue_name, routing_key)
+
+        # Bind AE DLQ to AE (catch-all for unroutable messages)
+        await self._bind_ae_dlq()
 
     async def _bind_queue(self, queue_name: QueueName, routing_key: str) -> None:
         """Bind a queue to the topic exchange.
@@ -240,6 +288,36 @@ class QueueSetup:
             )
             raise QueueError(
                 f"Failed to bind queue {queue_name.value} to {routing_key}",
+                original=e,
+            ) from e
+
+    async def _bind_ae_dlq(self) -> None:
+        """Bind AE DLQ queue to alternate exchange.
+
+        This queue receives all messages that cannot be routed to any
+        main queue. Messages here indicate a routing configuration issue.
+        """
+        channel = self._connection.channel
+        try:
+            # Get existing queue
+            queue = await channel.declare_queue(
+                name=ALTERNATE_EXCHANGE_DLQ_NAME,
+                passive=True,
+            )
+            # Get existing exchange
+            exchange = await channel.declare_exchange(
+                name=ALTERNATE_EXCHANGE_NAME,
+                passive=True,
+            )
+            # Bind queue to exchange (all messages go to DLQ)
+            await queue.bind(exchange, routing_key="")
+            logger.debug(f"Bound AE DLQ {ALTERNATE_EXCHANGE_DLQ_NAME} to {ALTERNATE_EXCHANGE_NAME}")
+        except Exception as e:
+            logger.error(
+                f"Failed to bind AE DLQ {ALTERNATE_EXCHANGE_DLQ_NAME}: {e}"
+            )
+            raise QueueError(
+                f"Failed to bind AE DLQ {ALTERNATE_EXCHANGE_DLQ_NAME}",
                 original=e,
             ) from e
 

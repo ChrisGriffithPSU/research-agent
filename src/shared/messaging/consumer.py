@@ -16,6 +16,11 @@ from src.shared.messaging.exceptions import (
     PermanentError,
     TemporaryError,
     ConsumeError,
+    ChannelError,
+    ChannelClosedError,
+    ConnectionClosedError,
+    ResourceLockedError,
+    PreconditionFailedError,
 )
 
 logger = logging.getLogger(__name__)
@@ -255,6 +260,22 @@ class MessageConsumer:
                 await message.nack(requeue=True)
                 self._metrics.record_message_nacked(queue_name.value, requeued=True)
 
+            except aio_pika.exceptions.ChannelClosed as e:
+                # Channel closed by broker - classify by reply code
+                await self._handle_channel_closed(
+                    message, queue_name, e
+                )
+
+            except aio_pika.exceptions.ConnectionClosed as e:
+                # Connection closed by broker
+                logger.error(
+                    f"Connection closed while processing message from {queue_name.value}: {e}"
+                )
+                # Don't requeue - connection is down
+                await message.nack(requeue=False)
+                self._metrics.record_message_nacked(queue_name.value, requeued=False)
+                self._metrics.record_dlq_message(queue_name.value, "connection_closed")
+
             except Exception as e:
                 # Unknown error - treat as transient, requeue
                 logger.warning(
@@ -316,6 +337,78 @@ class MessageConsumer:
         await message.nack(requeue=False)
         self._metrics.record_message_nacked(queue_name.value, requeued=False)
         self._metrics.record_dlq_message(queue_name.value, reason)
+
+    async def _handle_channel_closed(
+        self,
+        message: aio_pika.IncomingMessage,
+        queue_name: QueueName,
+        error: aio_pika.exceptions.ChannelClosed,
+    ) -> None:
+        """Handle channel closed by broker.
+
+        Classifies errors by AMQP reply code and routes appropriately.
+
+        Args:
+            message: Incoming message
+            queue_name: Queue where error occurred
+            error: ChannelClosed exception with reply_code and reply_text
+        """
+        reply_code = error.reply_code
+        reply_text = error.reply_text
+
+        logger.error(
+            f"Channel closed for queue {queue_name.value}: "
+            f"[{reply_code}] {reply_text}"
+        )
+
+        # Classify by reply code
+        if reply_code == 405:  # RESOURCE_LOCKED
+            # Another consumer is processing - requeue
+            logger.warning(f"Queue {queue_name.value} locked, requeuing message")
+            await message.nack(requeue=True)
+            self._metrics.record_message_nacked(queue_name.value, requeued=True)
+            self._metrics.record_error(queue_name.value, "resource_locked")
+
+        elif reply_code == 406:  # PRECONDITION_FAILED
+            # Queue declaration mismatch - don't requeue
+            logger.error(
+                f"Precondition failed for queue {queue_name.value}: {reply_text}"
+            )
+            await message.nack(requeue=False)
+            self._metrics.record_message_nacked(queue_name.value, requeued=False)
+            self._metrics.record_dlq_message(queue_name.value, "precondition_failed")
+
+        elif reply_code == 404:  # NOT_FOUND
+            # Queue doesn't exist - don't requeue
+            logger.error(f"Queue {queue_name.value} not found: {reply_text}")
+            await message.nack(requeue=False)
+            self._metrics.record_message_nacked(queue_name.value, requeued=False)
+            self._metrics.record_dlq_message(queue_name.value, "queue_not_found")
+
+        elif reply_code == 403:  # ACCESS_REFUSED
+            # Permission denied - don't requeue
+            logger.error(f"Access denied for queue {queue_name.value}: {reply_text}")
+            await message.nack(requeue=False)
+            self._metrics.record_message_nacked(queue_name.value, requeued=False)
+            self._metrics.record_dlq_message(queue_name.value, "access_denied")
+
+        elif reply_code >= 500:
+            # Broker error - might be transient, requeue
+            logger.warning(
+                f"Broker error [{reply_code}] for queue {queue_name.value}, requeuing: {reply_text}"
+            )
+            await message.nack(requeue=True)
+            self._metrics.record_message_nacked(queue_name.value, requeued=True)
+            self._metrics.record_error(queue_name.value, f"broker_error_{reply_code}")
+
+        else:
+            # Unknown error - don't requeue, send to DLQ
+            logger.error(
+                f"Unknown channel error [{reply_code}] for queue {queue_name.value}: {reply_text}"
+            )
+            await message.nack(requeue=False)
+            self._metrics.record_message_nacked(queue_name.value, requeued=False)
+            self._metrics.record_dlq_message(queue_name.value, f"channel_error_{reply_code}")
 
     async def health_check(self) -> bool:
         """Check if consumer is healthy.

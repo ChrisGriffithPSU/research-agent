@@ -133,6 +133,66 @@ class RabbitMQConnection:
         return self._is_connected and self._connection is not None
 
     @property
+    def is_closed(self) -> bool:
+        """Check if connection or channel is closed.
+
+        Returns:
+            True if connection is closed, False if open
+        """
+        if self._connection is None:
+            return True
+        return self._connection.is_closed
+
+    async def enable_publisher_confirms(self) -> None:
+        """Enable publisher confirms on the channel.
+
+        After calling this, all publishes will wait for broker confirmation.
+        This ensures messages are actually received by the broker.
+
+        Raises:
+            ConnectionError: If not connected or channel is closed
+            ChannelError: If confirm mode cannot be enabled
+        """
+        if not self._is_connected or self._channel is None:
+            raise ConnectionError(
+                "Not connected to RabbitMQ. Call connect() first."
+            )
+
+        if self._channel.is_closed:
+            raise ConnectionError("Channel is closed")
+
+        try:
+            await self._channel.confirm_select()
+            logger.debug("Publisher confirms enabled on channel")
+        except Exception as e:
+            logger.error(f"Failed to enable publisher confirms: {e}")
+            from src.shared.messaging.exceptions import ChannelError
+            raise ChannelError(
+                "Failed to enable publisher confirms",
+                original=e,
+            ) from e
+
+    def create_transaction(self) -> "ChannelTransaction":
+        """Create a transaction context manager for atomic operations.
+
+        Use with async with statement to ensure atomic publish:
+            async with connection.create_transaction():
+                await channel.publish(...)
+                await channel.publish(...)
+
+        Returns:
+            ChannelTransaction context manager
+
+        Raises:
+            ConnectionError: If not connected
+        """
+        if not self._is_connected or self._channel is None:
+            raise ConnectionError(
+                "Not connected to RabbitMQ. Call connect() first."
+            )
+        return ChannelTransaction(self._channel)
+
+    @property
     def channel(self) -> aio_pika.RobustChannel:
         """Get channel for operations.
 
@@ -202,6 +262,100 @@ class RabbitMQConnection:
     def __repr__(self) -> str:
         """String representation."""
         return f"RabbitMQConnection(connected={self._is_connected}, host={self._config.host})"
+
+
+class ChannelTransaction:
+    """Context manager for RabbitMQ transactions.
+
+    Ensures atomic publish of multiple messages within a transaction.
+    All messages are either committed together or rolled back.
+
+    Example:
+        async with connection.create_transaction() as tx:
+            await channel.publish(..., routing_key="queue1")
+            await channel.publish(..., routing_key="queue2")
+        # Both messages committed atomically
+
+    Note: Transactions have performance overhead. Use only when
+    atomicity is required. For simple cases, use publisher confirms.
+    """
+
+    def __init__(self, channel: aio_pika.RobustChannel):
+        """Initialize transaction.
+
+        Args:
+            channel: RabbitMQ channel to use for transaction
+        """
+        self._channel = channel
+        self._in_transaction = False
+
+    async def __aenter__(self) -> "ChannelTransaction":
+        """Enter transaction context."""
+        await self._channel.transaction()
+        self._in_transaction = True
+        logger.debug("Transaction started")
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Exit transaction context, committing on success."""
+        if exc_type is not None:
+            # Exception occurred - rollback
+            await self.rollback()
+            logger.debug("Transaction rolled back due to exception")
+        else:
+            # Success - commit
+            await self.commit()
+            logger.debug("Transaction committed")
+
+    async def commit(self) -> None:
+        """Commit the transaction.
+
+        All published messages are made visible to consumers.
+
+        Raises:
+            ChannelError: If commit fails
+        """
+        if not self._in_transaction:
+            logger.warning("Commit called outside transaction, ignoring")
+            return
+
+        try:
+            await self._channel.transaction_commit()
+            self._in_transaction = False
+            logger.debug("Transaction committed successfully")
+        except Exception as e:
+            logger.error(f"Failed to commit transaction: {e}")
+            self._in_transaction = False
+            from src.shared.messaging.exceptions import ChannelError
+            raise ChannelError(
+                "Failed to commit transaction",
+                original=e,
+            ) from e
+
+    async def rollback(self) -> None:
+        """Rollback the transaction.
+
+        All published messages are discarded.
+
+        Raises:
+            ChannelError: If rollback fails
+        """
+        if not self._in_transaction:
+            logger.warning("Rollback called outside transaction, ignoring")
+            return
+
+        try:
+            await self._channel.transaction_rollback()
+            self._in_transaction = False
+            logger.debug("Transaction rolled back successfully")
+        except Exception as e:
+            logger.error(f"Failed to rollback transaction: {e}")
+            self._in_transaction = False
+            from src.shared.messaging.exceptions import ChannelError
+            raise ChannelError(
+                "Failed to rollback transaction",
+                original=e,
+            ) from e
 
 
 # Global connection singleton

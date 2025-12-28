@@ -6,6 +6,8 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
+import aio_pika
+
 if TYPE_CHECKING:
     from src.shared.testing.mocks import MockMessageConnection, MockMessagePublisher
 
@@ -34,7 +36,7 @@ class MessagePublisher:
         connection = RabbitMQConnection(connection_string="amqp://localhost:5672/")
         publisher = MessagePublisher(
             connection=connection,
-            retry_strategy=ExponentialBackoffStrategy(max_retries=5),
+            retry_strategy=ExponentialBackoffStrategy(max_attempts=5),
             circuit_breaker=CircuitBreaker(failure_threshold=5),
         )
         await connection.connect()
@@ -67,17 +69,23 @@ class MessagePublisher:
         connection: IMessageConnection,
         retry_strategy: Optional[IRetryStrategy] = None,
         circuit_breaker: Optional[ICircuitBreaker] = None,
+        persistent: bool = True,
+        confirm_mode: bool = True,
     ):
         """Initialize message publisher.
-        
+
         Args:
             connection: Message broker connection (RabbitMQ, in-memory, etc.)
             retry_strategy: Strategy for retrying failed publishes
             circuit_breaker: Circuit breaker for fault tolerance
+            persistent: Make messages persistent (survive broker restart)
+            confirm_mode: Wait for broker confirmation before returning
         """
         self._connection = connection
         self._retry_strategy = retry_strategy or ExponentialBackoffStrategy()
         self._circuit_breaker = circuit_breaker
+        self._persistent = persistent
+        self._confirm_mode = confirm_mode
     
     async def publish(
         self,
@@ -185,23 +193,101 @@ class MessagePublisher:
         immediate: bool,
     ) -> None:
         """Perform actual publish to broker.
-        
+
         Args:
             message_bytes: Serialized message bytes
             routing_key: Routing key for topic exchange
             mandatory: Fail if no queue is bound
             immediate: Fail if no consumer is ready
+
+        Raises:
+            ConfirmFailedError: If broker rejects message in confirm mode
+            ChannelClosedError: If channel is closed during publish
         """
         channel = self._connection.channel
-        
-        # Broker-specific publish logic
-        # This is abstracted in the connection's channel
+
+        # Set delivery mode based on persistence setting
+        delivery_mode = (
+            aio_pika.DeliveryMode.PERSISTENT
+            if self._persistent
+            else aio_pika.DeliveryMode.NOT_PERSISTENT
+        )
+
+        # Enable publisher confirms if required and not already enabled
+        if self._confirm_mode:
+            try:
+                await channel.confirm_select()
+            except Exception as e:
+                # Confirm mode may already be enabled, ignore error
+                logger.debug(f"Confirm select error (may already be enabled): {e}")
+
+        # Publish message
         await channel.publish(
             body=message_bytes,
             routing_key=routing_key,
             mandatory=mandatory,
             immediate=immediate,
+            delivery_mode=delivery_mode,
         )
+
+        # Wait for confirmation if in confirm mode
+        if self._confirm_mode:
+            try:
+                # Wait for confirmation with timeout
+                confirmation = await channel.wait_for_confirms(timeout=30.0)
+                if not confirmation:
+                    from src.shared.messaging.exceptions import ConfirmFailedError
+                    raise ConfirmFailedError(
+                        f"Message not confirmed by broker for routing key: {routing_key}",
+                        reply_code=503,
+                        reply_text="NO_CONSUMERS",
+                    )
+            except asyncio.TimeoutError:
+                from src.shared.messaging.exceptions import ConfirmFailedError
+                raise ConfirmFailedError(
+                    f"Confirmation timeout for routing key: {routing_key}",
+                )
+
+    async def _do_publish_with_transaction(
+        self,
+        message_bytes: bytes,
+        routing_key: str,
+        mandatory: bool,
+        immediate: bool,
+    ) -> None:
+        """Publish message within a transaction for atomicity.
+
+        All messages in a transaction are committed together or rolled back.
+        Use this when you need to ensure multiple messages are published atomically.
+
+        Args:
+            message_bytes: Serialized message bytes
+            routing_key: Routing key for topic exchange
+            mandatory: Fail if no queue is bound
+            immediate: Fail if no consumer is ready
+
+        Raises:
+            ChannelError: If transaction commit fails
+        """
+        async with self._connection.create_transaction() as tx:
+            # Publish within transaction
+            channel = self._connection.channel
+
+            # Set delivery mode based on persistence setting
+            delivery_mode = (
+                aio_pika.DeliveryMode.PERSISTENT
+                if self._persistent
+                else aio_pika.DeliveryMode.NOT_PERSISTENT
+            )
+
+            await channel.publish(
+                body=message_bytes,
+                routing_key=routing_key,
+                mandatory=mandatory,
+                immediate=immediate,
+                delivery_mode=delivery_mode,
+            )
+            # Transaction commits on exit from context manager
     
     async def health_check(self) -> bool:
         """Check if publisher is healthy.
@@ -212,7 +298,7 @@ class MessagePublisher:
         try:
             if self._circuit_breaker and self._circuit_breaker.is_open():
                 return False
-            return self._connection.is_connected()
+            return self._connection.is_connected
         except Exception:
             return False
     
@@ -233,7 +319,7 @@ class MessagePublisher:
     
     def __repr__(self) -> str:
         return (
-            f"MessagePublisher(connected={self._connection.is_connected()}, "
+            f"MessagePublisher(connected={self._connection.is_connected}, "
             f"circuit_breaker={'enabled' if self._circuit_breaker else 'disabled'})"
         )
 

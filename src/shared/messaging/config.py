@@ -96,6 +96,22 @@ class MessagingConfig(BaseSettings):
         description="Number of messages to prefetch (QoS)"
     )
 
+    # Publisher configuration
+    message_persistence: bool = Field(
+        default=True,
+        description="Enable message persistence (messages survive broker restart)"
+    )
+    publisher_confirms: bool = Field(
+        default=True,
+        description="Enable publisher confirms (wait for broker acknowledgment)"
+    )
+
+    # Queue features configuration
+    alternate_exchange_enabled: bool = Field(
+        default=True,
+        description="Enable alternate exchange for unroutable messages"
+    )
+
     @property
     def connection_url(self) -> str:
         """Construct AMQP connection URL."""

@@ -478,7 +478,7 @@ async def test_full_pipeline() -> bool:
 
         publisher = MessagePublisher(
             connection=mq_connection,
-            retry_strategy=ExponentialBackoffStrategy(max_retries=3),
+            retry_strategy=ExponentialBackoffStrategy(max_attempts=3),
         )
         print_success("RabbitMQ publisher initialized")
 

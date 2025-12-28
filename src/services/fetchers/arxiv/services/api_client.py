@@ -164,7 +164,6 @@ class ArxivAPIClient:
         # Check cache first
         if self.cache:
             cache_key_params = {
-                "query": query,
                 "max_results": max_results,
                 "start_index": start_index,
                 "sort_by": sort_by,
