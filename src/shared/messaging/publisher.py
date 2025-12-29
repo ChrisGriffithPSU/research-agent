@@ -244,21 +244,7 @@ class MessagePublisher:
 
         # Wait for confirmation if in confirm mode
         if self._confirm_mode:
-            try:
-                # Wait for confirmation with timeout
-                confirmation = await channel.wait_for_confirms(timeout=30.0)
-                if not confirmation:
-                    from src.shared.messaging.exceptions import ConfirmFailedError
-                    raise ConfirmFailedError(
-                        f"Message not confirmed by broker for routing key: {routing_key}",
-                        reply_code=503,
-                        reply_text="NO_CONSUMERS",
-                    )
-            except asyncio.TimeoutError:
-                from src.shared.messaging.exceptions import ConfirmFailedError
-                raise ConfirmFailedError(
-                    f"Confirmation timeout for routing key: {routing_key}",
-                )
+            logger.debug("Publisher confirms enabled - publish() is confirm-aware in aio-pika v9")
 
     async def _do_publish_with_transaction(
         self,
