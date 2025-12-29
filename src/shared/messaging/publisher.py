@@ -221,13 +221,25 @@ class MessagePublisher:
                 # Confirm mode may already be enabled, ignore error
                 logger.debug(f"Confirm select error (may already be enabled): {e}")
 
-        # Publish message
-        await channel.publish(
+        # In aio-pika v9, publish() is on the exchange, not the channel
+        # Get the default exchange (which is a direct exchange bound to empty string)
+        # or declare the specific exchange we need
+        exchange = await channel.declare_exchange(
+            name="researcher",
+            passive=True,  # Don't create, just get existing
+        )
+
+        # Create message with proper delivery mode
+        message = aio_pika.Message(
             body=message_bytes,
-            routing_key=routing_key,
-            mandatory=mandatory,
-            immediate=immediate,
             delivery_mode=delivery_mode,
+            content_type="application/json",
+        )
+
+        # Publish to exchange with routing key
+        await exchange.publish(
+            message,
+            routing_key=routing_key,
         )
 
         # Wait for confirmation if in confirm mode

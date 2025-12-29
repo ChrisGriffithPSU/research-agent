@@ -225,10 +225,30 @@ class RabbitMQConnection:
                 name=queue_name,
                 passive=True,  # Don't create, just check
             )
-            return {
-                "message_count": queue_info.method.message_count,
-                "consumer_count": queue_info.method.consumer_count,
-            }
+
+            # In aio-pika v9, use declaration_result instead of method
+            # The attribute is 'declaration_result' (not 'method' or 'declare_result')
+            if hasattr(queue_info, "declaration_result"):
+                result = queue_info.declaration_result
+                message_count = getattr(result, "message_count", 0)
+                consumer_count = getattr(result, "consumer_count", 0)
+                return {
+                    "message_count": message_count,
+                    "consumer_count": consumer_count,
+                }
+            else:
+                # Fallback for any other version
+                logger.warning(f"Unexpected queue info structure for {queue_name}")
+                return None
+
+        except aio_pika.exceptions.ChannelClosed as e:
+            if e.reply_code == 404:  # NOT_FOUND
+                logger.debug(f"Queue {queue_name} does not exist")
+                return None
+            raise
+        except Exception as e:
+            logger.error(f"Error getting queue info for {queue_name}: {e}")
+            raise
         except aio_pika.exceptions.ChannelClosed as e:
             if e.reply_code == 404:  # NOT_FOUND
                 logger.debug(f"Queue {queue_name} does not exist")
