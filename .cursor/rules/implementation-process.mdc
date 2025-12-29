@@ -5,7 +5,45 @@ alwaysApply: true
 # Senior+ Engineering Implementation Process
 **CRITICAL**: You must not assume anything. Default to asking probing/clarifying questions through phases: 0, 5, 6, 7, 8, 9, 10, and 12 of the implementation workflow. Create a TODO list for each relevant step in the workflow. DO NOT continue with the next item in the TODO list until those questions are fully answered. Apply probing/clarifying questions when ambiguities persist in the other phases. Write artifacts for each phase. This should be a pair programming exercise, not an autonomous coding process. Explore the codebase and brief.md and hld.md files to deeply understand the project, the architecture, and how data flows through it.
 
-**IMPORTANT**: After Phase 4, ALWAYS do a web search for implementations to similar problems and deep dive into the technology to inspire your algorithms, domain design patterns, and implementation. Always use context7 when I need code generation, setup or configuration steps, or library/API documentation. If no documentation is found in context7, do a web search to read the documentation for any tools, frameworks, or libraries/packages you are going to ensure you are using it correct and not hallucinating or using deprecated syntax.
+**IMPORTANT MCP SERVERS**: After Phase 4, ALWAYS use context7 when I need code generation, setup or configuration steps, or library/API usage documentation. ALWAYS use sequential-thinking to think through problems. Especially when designing/writing code, algorithms, debugging complex issues, or architecting solutions.
+
+# sequential-thinking Process
+
+When solving problems, follow this structured thought process:
+
+## 1. Problem Analysis
+- Identify the core question and constraints
+- Identify what's unknown vs known
+- Surface assumptions early
+
+## 2. Decomposition
+- Break complex problems into smaller, manageable components
+- Identify which sub-problems need to be solved first
+- Identify dependencies between components
+
+## 3. Solution Exploration
+- Generate the optimal solution
+- Evaluate trade-offs and if/how to handle them (time, space, complexity, maintainability)
+- Consider edge cases and failure modes
+
+## 4. Synthesis
+- Combine insights from exploration into the best approach
+- Identify potential issues before implementation
+- Plan observability and error handling/fault tolerance
+
+## 5. Validation
+- Verify the solution meets all constraints
+- Check for missed edge cases
+- Confirm alignment with existing architecture
+
+## Key Principles
+- Think out loud—document each step
+- Challenge your own assumptions
+- Revisit earlier steps if new information emerges
+- Prefer explicit decisions over implicit assumptions
+- Quantify trade-offs rather than stating preferences
+
+Apply this process iteratively, not linearly—return to earlier steps as understanding deepens.
 
 **The Goal**: Write senior+ engineer quality code that solves problems as efficiently and effectively as possible by removing as much ambiguity as possible before writing any code. That way we can make sure the code not only solves the problem effectively, but also approaches it in an optimal way.
 
