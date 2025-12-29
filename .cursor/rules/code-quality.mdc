@@ -1,0 +1,151 @@
+---
+alwaysApply: true
+---
+
+# Senior+ Engineer Code Quality Rule
+
+## Overview
+
+This rule defines the principles and practices for writing senior+ engineer quality code. The goal is to produce code that is maintainable, debuggable, resistant to bugs, and integrates cleanly with existing systems. These principles apply to all code written for this project.
+
+## Core Philosophy
+
+Senior code is maintainable, debuggable, and resistant to bugs. Code is read more than written - optimize for comprehension. Precision over cleverness - explicit is better than implicit. The cost of change must be considered at every decision point. Write code as if the person maintaining it is a violent psychopath who knows where you live.
+
+## SOLID Principles
+
+The SOLID principles provide a foundation for writing maintainable, flexible code. Each principle addresses specific aspects of object-oriented design and together they help create systems that are easier to understand, extend, and maintain.
+
+### Single Responsibility Principle
+
+Each component does one thing well. Signs of violation include having multiple reasons for a component to change. Small, focused units are easier to test, debug, and reason about. When a class or function has multiple responsibilities, it becomes harder to understand, harder to test, and more likely to change when requirements evolve. Look for classes that could be split into smaller, more focused units. Functions should do one thing and do it completely.
+
+### Open/Closed Principle
+
+Software entities should be open for extension but closed for modification. Use composition over inheritance where appropriate. Strategy pattern, template method pattern, and hooks provide mechanisms for customization without modifying existing code. This principle suggests designing systems where new functionality can be added by extending existing code rather than changing it. Composition allows behavior to be selected at runtime, while inheritance creates static relationships that are harder to change.
+
+### Liskov Substitution Principle
+
+Subtypes must be substitutable for their base types without altering the correctness of the program. Contract violations are subtle bugs that manifest in unexpected ways. Preconditions cannot be strengthened in subtypes - a subclass should not require more than its parent class. Postconditions cannot be weakened in subtypes - a subclass should not promise less than its parent class. This principle ensures that polymorphism works correctly and that derived classes honor the contracts of their base classes.
+
+### Interface Segregation Principle
+
+Many specific interfaces are better than one general interface. Clients should not depend on methods they do not use. Fat interfaces lead to pollution and unnecessary dependencies. Instead of having one large interface that forces clients to depend on methods they do not need, create multiple smaller interfaces that are specific to particular client needs. This reduces coupling and makes it easier to implement and test components.
+
+### Dependency Inversion Principle
+
+Depend on abstractions, not concretions. This is the highest priority principle in this codebase. High-level modules must not depend on low-level modules. Both must depend on abstractions. Implementation uses dependency injection, interface injection, or service locators. Every external dependency must be abstracted behind an interface. This principle inverts the traditional dependency structure, ensuring that business logic does not depend on implementation details.
+
+## Dependency Inversion Deep Dive
+
+All external dependencies must be abstracted. This includes databases, APIs, file systems, caches, messaging systems, clocks, and loggers. The application core should never import concrete implementations. Create interfaces in domain or infrastructure layers, with implementations in outer layers. This enables testing without mocking frameworks, swapping implementations, and parallel development. Dependencies flow inward; nothing in the domain layer should depend on infrastructure. This architecture creates clear boundaries between concerns and makes the system more flexible.
+
+When implementing dependency inversion, define interfaces based on what the client needs, not what the implementation provides. Keep interfaces small and focused. Avoid the anti-pattern of having one interface per class; instead, group related operations into cohesive interfaces that reflect the needs of clients.
+
+## Functional Programming Integration
+
+Functional programming provides patterns that reduce bugs and improve code quality. Understanding when and how to apply these patterns is essential for writing senior-level code.
+
+### Why Functional Programming
+
+Immutability eliminates entire categories of bugs related to shared state mutation. Pure functions are inherently testable and thread-safe because they do not depend on or modify external state. Code becomes easier to reason about because the same input always produces the same output. These properties enable better parallelization and concurrency, as pure functions can be executed in any order without affecting each other.
+
+### When to Use Functional Patterns
+
+Apply functional patterns for business logic and transformations where data moves from one shape to another. Use them in data pipelines that perform sequential transformations of collections. Apply them for validation where functions chain together returning Result types. Use them for configuration where pure functions transform config objects. Functional patterns excel in scenarios where data flows through a series of predictable transformations.
+
+### How to Integrate Functional Patterns
+
+Use immutable data structures and create new copies when modification is needed. Prefer pure functions for business logic and isolate side effects at system boundaries. Use map, filter, and reduce patterns for collection operations instead of imperative loops. Return Result or Either types for operations that can fail instead of using exceptions for control flow. Use function composition to build complex behavior from simple, reusable parts. Currying and partial application enable configurable behavior without complex parameter objects.
+
+### When Not to Use Functional Patterns
+
+Do not use functional patterns when performance is critical and mutability is the bottleneck, though profile first to confirm this is the actual issue. Do not use them when the team is not familiar with FP patterns, as forcing unfamiliar patterns reduces productivity. Do not apply them when the domain is inherently stateful, instead use value objects to represent state changes. Side effects should be explicit at system boundaries, not hidden in pure function composition.
+
+### Common Functional Patterns to Apply
+
+Map over data to transform each element without mutation. Filter to select subsets based on predicates. Reduce or aggregate to combine values into summaries. Build pipelines to chain transformations with clear data flow. Use Maybe or Option types to handle absence of value explicitly. Use Result or Either types to handle success and failure explicitly without exceptions. Pattern matching expresses branching logic clearly and reduces the cognitive load of complex conditionals.
+
+## Concurrent and Parallel Programming
+
+Concurrent and parallel programming requires careful attention to correctness, as race conditions and deadlocks are among the hardest bugs to diagnose and fix.
+
+### Core Principles
+
+Understand that concurrency is about structure while parallelism is about execution. Write code that is correct first, then consider parallelization. Race conditions are among the hardest bugs to debug - prevent them architecturally rather than trying to detect them after the fact. Design systems so that concurrent access to shared state is either impossible or carefully controlled.
+
+### Async Programming Patterns
+
+Prefer async/await patterns for I/O-bound operations to avoid blocking threads. Keep async boundaries clear and consistent throughout the codebase. Never block on async code as this creates deadlock risk. Use cancellation tokens for long-running operations to enable graceful shutdown. Handle async errors explicitly and never let them propagate silently, as async error traces are often harder to interpret than synchronous ones.
+
+### Concurrency Control
+
+Prefer message passing over shared state to avoid synchronization complexity. Use actor models or agent-based patterns for stateful concurrency, where each actor processes messages sequentially and maintains its own state. Locks are a last resort - prefer higher-level abstractions like channels, queues, or actors. Use semaphores and condition variables for controlled access to shared resources. Use read-write locks for read-heavy workloads to allow concurrent reads while serializing writes.
+
+### Parallel Processing
+
+Parallelize independent operations that can run simultaneously, also known as embarrassingly parallel workloads. Use thread pools instead of spawning threads for each operation to avoid thread creation overhead. Partition work based on data characteristics to balance load across workers. Reduce results using associative operations that can be performed in any order. Consider data locality for cache efficiency when processing large datasets.
+
+### Common Concurrency Pitfalls to Avoid
+
+Deadlocks occur when threads wait for each other to release resources. Always acquire locks in consistent order to prevent this. Race conditions occur when the outcome depends on timing. Use atomic operations or synchronization to ensure correct behavior under concurrent access. Starvation occurs when threads cannot access resources they need. Ensure fair access to shared resources. Priority inversion occurs when high-priority tasks wait for low-priority tasks. Use priority inheritance protocols to prevent this.
+
+### Thread Safety Patterns
+
+Immutable data is always thread-safe and should be the default choice when possible. Use thread-local storage for per-thread state that should not be shared. Use concurrent collections for shared mutable state, as these are designed for thread-safe access. Use atomic operations for simple counters and flags. Use explicit synchronization for complex invariants that require multiple operations to appear atomic.
+
+## Character and Encoding Rules
+
+Use only ASCII characters including English letters, numbers, and standard punctuation. Do not use emojis, check marks, x marks, or any special symbols. Do not use emdashes - use regular hyphens instead. Do not include non-UTF-8 characters in code, comments, or strings. Variable names must be English only, descriptive, and should avoid abbreviations unless they are universally understood.
+
+## Comments Philosophy
+
+Write self-documenting code instead of explaining bad code. Only comment why, not what - the code shows what is happening. Comment complex algorithms, business decisions, and non-obvious workarounds. Document assumptions and invariants that are not apparent from the code. Never leave commented-out code in the codebase. TODOs must include author, date, and clear action item to ensure they are addressed.
+
+## Integration with Existing Code
+
+When adding new code to an existing codebase, follow these principles to ensure smooth integration.
+
+### Backward Compatibility
+
+Never change public interfaces without a deprecation cycle that gives consumers time to adapt. Use versioned APIs for external contracts to maintain compatibility while evolving. Database migrations must be backward-compatible during transition, using techniques like migration and backfill scripts. Additive changes are safe - adding new fields, methods, or parameters does not break existing consumers. Breaking changes require a migration path and clear communication to consumers.
+
+### Error Handling Integration
+
+Translate external errors into domain-specific errors at boundary layers. Never leak internal exceptions to external boundaries where they may expose implementation details. Use result types or exceptions consistently throughout the codebase, not both approaches mixed together. Preserve error context when translating across boundaries so that debugging remains possible.
+
+### Data Flow Integration
+
+Respect existing data shapes and contracts defined by the current codebase. When extending data, use additive changes only - adding new fields rather than changing existing ones. Map between boundaries rather than leaking internal structures to external layers. Validate at boundaries and trust data internally after it has passed validation.
+
+### Testing Integration
+
+Write tests at the same level of abstraction as the production code they test. Integration tests must use the same abstractions as production code to ensure they test the real behavior. Never mock the system under test - only mock its dependencies. Test behaviors, not implementation details, so that tests remain valid as implementation evolves.
+
+## Error Handling Strategy
+
+Fail fast with clear, actionable error messages that help developers understand what went wrong and how to fix it. Use typed errors or result types for recoverable failures so that callers can handle specific error cases. Log with sufficient context for debugging including correlation IDs and relevant state. Never swallow exceptions silently as this makes debugging nearly impossible. Distinguish between programming errors, which indicate bugs in the code, and operational errors, which indicate expected failure cases. Error messages should help debug without access to source code.
+
+## Defensive Programming
+
+Validate all inputs at system boundaries and reject invalid input immediately. Use type systems to encode invariants so that invalid states cannot be represented. Make illegal states unrepresentable through careful type design. Make defensive copies for mutable data crossing boundaries to prevent external modification. Perform null or object checks before access, or use Option or Maybe types to make absence explicit. Preconditions should fail fast with clear messages that indicate what was expected.
+
+## Debugging-Friendly Code
+
+Make execution traceable with correlation IDs that flow across boundaries and can be used to trace a request through the entire system. Use structured logging at decision points and boundaries to provide visibility into system behavior. Use immutable data structures where state changes matter so that history can be reconstructed. Use pure functions for business logic as they are deterministic and testable. Make side effects explicit at system boundaries so that it is clear where state changes occur. Log before and after operations with relevant context including operation name, inputs, and outcome.
+
+## Anti-Patterns to Avoid
+
+God objects or classes have too many responsibilities and should be split into smaller, focused units. Feature envy occurs when a class accesses another class data excessively and indicates misplaced responsibility. Primitive obsession occurs when using primitives like strings and integers instead of domain-specific types. Data clumps occur when the same variables are grouped together repeatedly and should be extracted into objects. Shotgun surgery occurs when one change requires many scattered modifications and indicates poor cohesion. Magic numbers or strings are values without explanation and should be extracted into named constants. Deep nesting makes code hard to follow - use early returns and guard clauses to reduce nesting. Circular dependencies create coupling that makes the system rigid. Stringly-typed code uses strings where types would be safer and provide compile-time checking.
+
+## Code Organization
+
+Organize files by feature rather than by type, keeping related concepts together. This feature-based structure makes it easier to understand and modify a specific capability. Related concepts should be co-located, preferring cohesion over separation by type. Maintain clear separation between domain, application, and infrastructure layers. Dependencies flow inward - the domain layer should have no dependencies on outer layers. Use package or namespace structure to enforce architectural boundaries and prevent inappropriate dependencies.
+
+## Performance Considerations
+
+Profile before optimizing - measure to identify actual bottlenecks rather than guessing. Optimize for algorithmic complexity first, as improving from O(n^2) to O(n log n) has more impact than micro-optimizations. Use appropriate data structures for access patterns - hash tables for lookups, trees for ordered access, queues for streaming. Memoize expensive pure functions with care, as memoization adds memory overhead. Batch I/O operations when possible to reduce overhead from individual operations. Consider caching at appropriate layers based on data characteristics and access patterns.
+
+## Summary
+
+Writing senior+ engineer quality code requires attention to multiple dimensions: architecture through SOLID principles, correctness through functional patterns and defensive programming, robustness through proper error handling, and debuggability through observability. The goal is code that is maintainable, meaning future developers can understand and modify it easily; debuggable, meaning problems can be diagnosed quickly; and bug-free, meaning the code correctly implements its intended behavior under all conditions. Every decision should be evaluated against these goals, and when trade-offs are necessary, they should be made explicitly and documented.

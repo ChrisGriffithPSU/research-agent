@@ -306,12 +306,11 @@ User selects the approach before moving forward.
 **Execute with precision based on all prior phases.**
 
 Now and only now, begin writing code:
-- Follow the abstractions designed in phase 6 strictly
-- Implement the algorithm selected in phase 8
-- Include observability hooks from phase 7 from the start
-- Write tests from phase 9 alongside code (TDD or test-after, but tests are mandatory)
-- Honor all interface contracts from phase 3
-- Respect all design patterns from phase 5
+- Follow the abstractions designed in phase 7 strictly
+- Implement the algorithm selected in phase 9
+- Include observability hooks from phase 8 from the start
+- Honor all interface contracts from phase 4
+- Respect all design patterns from phase 6
 
 Implementation is deterministic at this point—all decisions have been made.
 
