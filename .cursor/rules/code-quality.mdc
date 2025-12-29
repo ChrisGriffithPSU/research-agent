@@ -106,9 +106,9 @@ Write self-documenting code instead of explaining bad code. Only comment why, no
 
 When adding new code to an existing codebase, follow these principles to ensure smooth integration.
 
-### Backward Compatibility
+### No Backward Compatibility
 
-Never change public interfaces without a deprecation cycle that gives consumers time to adapt. Use versioned APIs for external contracts to maintain compatibility while evolving. Database migrations must be backward-compatible during transition, using techniques like migration and backfill scripts. Additive changes are safe - adding new fields, methods, or parameters does not break existing consumers. Breaking changes require a migration path and clear communication to consumers.
+We want the simplest change possible. We don't care about migration. Code readability matters most, and we're happy to make bigger changes to achieve it. Do not leave deprecated or incorrect implementations as backwards compatible parameters to enable. Delete any instances of it all together.
 
 ### Error Handling Integration
 
