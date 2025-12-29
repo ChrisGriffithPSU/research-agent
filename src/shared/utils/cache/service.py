@@ -3,12 +3,17 @@
 This module provides a clean separation between cache interface and implementation.
 All dependencies are injected through the constructor for testability.
 """
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
 from src.shared.interfaces import (
     ICacheBackend,
     ISerializer,
+)
+from src.shared.exceptions.cache import (
+    CacheError,
+    CacheSerializationError,
 )
 from src.shared.utils.cache.keys import validate_cache_key
 
@@ -18,56 +23,88 @@ logger = logging.getLogger(__name__)
 
 class DefaultJSONSerializer:
     """Default JSON serializer for cache values.
-    
+
     Handles basic Python types that are JSON-serializable.
+
+    Raises:
+        CacheSerializationError: If serialization/deserialization fails
     """
-    
+
     def serialize(self, value: Any) -> bytes:
-        """Serialize value to JSON bytes."""
-        return json.dumps(value, default=str).encode('utf-8')
-    
+        """Serialize value to JSON bytes.
+
+        Args:
+            value: Value to serialize
+
+        Returns:
+            Serialized bytes
+
+        Raises:
+            CacheSerializationError: If serialization fails
+        """
+        try:
+            return json.dumps(value, default=str).encode('utf-8')
+        except (TypeError, ValueError) as e:
+            raise CacheSerializationError(
+                message=f"Failed to serialize cache value: {e}",
+                value_type=type(value).__name__,
+                original_error=e,
+            ) from e
+
     def deserialize(self, data: bytes) -> Any:
-        """Deserialize JSON bytes to value."""
-        return json.loads(data.decode('utf-8'))
+        """Deserialize JSON bytes to value.
 
+        Args:
+            data: Serialized bytes
 
-# Import json for serializer
-import json
+        Returns:
+            Deserialized value
+
+        Raises:
+            CacheSerializationError: If deserialization fails
+        """
+        try:
+            return json.loads(data.decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError) as e:
+            raise CacheSerializationError(
+                message=f"Failed to deserialize cache value: {e}",
+                original_error=e,
+            ) from e
 
 
 class CacheService:
     """High-level cache service with injectable dependencies.
-    
+
     This is the main cache interface used by the application.
     All dependencies are injected through the constructor.
-    
+
     Example:
         # Production use with Redis
         backend = RedisCacheBackend(redis_url="redis://localhost:6379/0")
         cache = CacheService(cache_backend=backend)
         await cache.initialize()
-        
+
         # Testing use with in-memory cache
         from src.shared.testing.mocks import InMemoryCacheBackend
         cache = CacheService(cache_backend=InMemoryCacheBackend())
-        
+
         # Use cache
         await cache.set_cached("key", {"data": "value"}, ttl=3600)
         value = await cache.get_cached("key")
-    
+
     Attributes:
         _backend: Cache backend implementation (ICacheBackend)
         _serializer: Serializer for values (ISerializer)
         _initialized: Whether the service has been initialized
     """
-    
+
     def __init__(
         self,
         cache_backend: ICacheBackend,
         serializer: Optional[ISerializer] = None,
     ):
         """Initialize cache service.
-        
+
         Args:
             cache_backend: Cache backend implementation (Redis, memory, etc.)
             serializer: Serializer for cache values (optional, default JSON)
@@ -75,43 +112,53 @@ class CacheService:
         self._backend = cache_backend
         self._serializer = serializer or DefaultJSONSerializer()
         self._initialized = False
-    
+
     async def initialize(self) -> None:
         """Initialize the cache backend.
-        
+
         Calls initialize on the backend if it has that method.
         """
         if hasattr(self._backend, 'initialize'):
             await self._backend.initialize()
         self._initialized = True
         logger.info("CacheService initialized")
-    
+
     async def get_cached(self, cache_key: str) -> Optional[Any]:
         """Get a value from cache.
-        
+
         Args:
             cache_key: Cache key to retrieve
-            
+
         Returns:
             Cached value or None if not found
+
+        Raises:
+            CacheError: If operation fails
         """
         validate_cache_key(cache_key)
-        
+
         try:
             data = await self._backend.get(cache_key)
-            
+
             if data is None:
                 logger.debug(f"Cache miss: {cache_key}")
                 return None
-            
+
             value = self._serializer.deserialize(data)
             logger.debug(f"Cache hit: {cache_key}")
             return value
-            
+
+        except CacheError:
+            # Re-raise cache-specific errors
+            raise
         except Exception as e:
             logger.error(f"Cache get failed for key {cache_key}: {e}", exc_info=True)
-            return None
-    
+            raise CacheError(
+                message=f"Cache get operation failed: {e}",
+                cache_key=cache_key,
+                original_error=e,
+            ) from e
+
     async def set_cached(
         self,
         cache_key: str,
@@ -119,105 +166,155 @@ class CacheService:
         ttl: Optional[int] = None,
     ) -> None:
         """Set a value in cache.
-        
+
         Args:
             cache_key: Cache key to store
             value: Value to cache
             ttl: Time-to-live in seconds (None = no expiration)
+
+        Raises:
+            CacheError: If operation fails
         """
         validate_cache_key(cache_key)
-        
+
         if value is None:
             logger.debug(f"Skipping cache set for None value: {cache_key}")
             return
-        
+
         try:
             serialized = self._serializer.serialize(value)
             await self._backend.set(cache_key, serialized, ttl_seconds=ttl)
             logger.debug(f"Set cache key: {cache_key}, TTL: {ttl}")
-            
+
+        except CacheError:
+            # Re-raise cache-specific errors
+            raise
         except Exception as e:
             logger.error(f"Cache set failed for key {cache_key}: {e}", exc_info=True)
-            raise
-    
+            raise CacheError(
+                message=f"Cache set operation failed: {e}",
+                cache_key=cache_key,
+                original_error=e,
+            ) from e
+
     async def delete(self, cache_key: str) -> None:
         """Delete a value from cache.
-        
+
         Args:
             cache_key: Cache key to delete
+
+        Raises:
+            CacheError: If operation fails
         """
         validate_cache_key(cache_key)
-        
+
         try:
             await self._backend.delete(cache_key)
             logger.debug(f"Deleted cache key: {cache_key}")
-            
+
+        except CacheError:
+            # Re-raise cache-specific errors
+            raise
         except Exception as e:
             logger.error(f"Cache delete failed for key {cache_key}: {e}", exc_info=True)
-    
+            raise CacheError(
+                message=f"Cache delete operation failed: {e}",
+                cache_key=cache_key,
+                original_error=e,
+            ) from e
+
     async def delete_pattern(self, pattern: str) -> None:
         """Delete all keys matching a pattern.
-        
+
         Args:
             pattern: Key pattern (e.g., "cache:llm:*")
+
+        Raises:
+            CacheError: If operation fails
         """
         try:
             await self._backend.delete_pattern(pattern)
             logger.info(f"Deleted keys matching pattern: {pattern}")
-            
+
+        except CacheError:
+            # Re-raise cache-specific errors
+            raise
         except Exception as e:
             logger.error(f"Cache delete pattern failed for {pattern}: {e}", exc_info=True)
-    
+            raise CacheError(
+                message=f"Cache delete pattern operation failed: {e}",
+                original_error=e,
+            ) from e
+
     async def get_many(self, cache_keys: List[str]) -> Dict[str, Any]:
         """Get multiple values from cache.
-        
+
         Args:
             cache_keys: List of cache keys
-            
+
         Returns:
             Dict of key -> value (missing keys not included)
+
+        Raises:
+            CacheError: If operation fails
         """
         if not cache_keys:
             return {}
-        
+
         try:
             results = await self._backend.get_many(cache_keys)
             return {
                 k: self._serializer.deserialize(v)
                 for k, v in results.items()
             }
-            
+
+        except CacheError:
+            # Re-raise cache-specific errors
+            raise
         except Exception as e:
             logger.error(f"Cache get_many failed: {e}", exc_info=True)
-            return {}
-    
+            raise CacheError(
+                message=f"Cache get_many operation failed: {e}",
+                original_error=e,
+            ) from e
+
     async def exists(self, cache_key: str) -> bool:
         """Check if a key exists in cache.
-        
+
         Args:
             cache_key: Cache key to check
-            
+
         Returns:
             True if key exists, False otherwise
+
+        Raises:
+            CacheError: If operation fails
         """
         validate_cache_key(cache_key)
-        
+
         try:
             return await self._backend.exists(cache_key)
-            
+
+        except CacheError:
+            # Re-raise cache-specific errors
+            raise
         except Exception as e:
             logger.error(f"Cache exists check failed for {cache_key}: {e}", exc_info=True)
-            return False
-    
+            raise CacheError(
+                message=f"Cache exists operation failed: {e}",
+                cache_key=cache_key,
+                original_error=e,
+            ) from e
+
     async def close(self) -> None:
         """Close cache service and backend connection."""
         await self._backend.close()
         self._initialized = False
         logger.info("CacheService closed")
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get cache statistics.
-        
+
         Returns:
             Dict with backend type information
         """
@@ -225,7 +322,7 @@ class CacheService:
             "backend_type": type(self._backend).__name__,
             "initialized": self._initialized,
         }
-    
+
     @property
     def backend(self) -> ICacheBackend:
         """Get the underlying backend (for testing)."""
@@ -374,10 +471,6 @@ class RedisCacheBackend:
     async def is_connected(self) -> bool:
         """Check if connected to Redis."""
         return await self.connection.is_connected()
-
-
-# Remove the old global factory function
-# The new pattern uses explicit dependency injection
 
 
 __all__ = [

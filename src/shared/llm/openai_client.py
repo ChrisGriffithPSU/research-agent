@@ -5,6 +5,10 @@ from typing import Any, Dict, List, Optional
 from openai import AsyncOpenAI
 
 from .base import BaseLLMClient, LLMProvider, LLMResponse
+from src.shared.exceptions.llm import (
+    LLMError,
+    LLMProviderError,
+)
 
 
 # Pricing per 1M tokens (as of Dec 2024 - update as needed)
@@ -81,7 +85,12 @@ class OpenAIClient(BaseLLMClient):
             )
 
         except Exception as e:
-            raise RuntimeError(f"OpenAI completion failed: {str(e)}")
+            raise LLMProviderError(
+                message=f"OpenAI completion failed: {str(e)}",
+                provider="openai",
+                model=model,
+                original_error=e,
+            ) from e
 
     async def generate_embedding(
         self,
@@ -100,7 +109,12 @@ class OpenAIClient(BaseLLMClient):
             return response.data[0].embedding
 
         except Exception as e:
-            raise RuntimeError(f"OpenAI embedding generation failed: {str(e)}")
+            raise LLMProviderError(
+                message=f"OpenAI embedding generation failed: {str(e)}",
+                provider="openai",
+                model=model,
+                original_error=e,
+            ) from e
 
     async def health_check(self) -> bool:
         """Check if OpenAI API is reachable."""

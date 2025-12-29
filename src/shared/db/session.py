@@ -1,4 +1,5 @@
 """Async session management for database operations."""
+import asyncio
 from typing import AsyncGenerator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,13 +8,22 @@ from src.shared.db.config import get_session_factory
 
 # Global session factory (created on first use)
 _session_factory = None
+_session_factory_lock = asyncio.Lock()
 
 
-def _get_factory():
-    """Get session factory (lazy initialization)."""
+async def _get_factory():
+    """Get session factory (lazy initialization with thread safety)."""
     global _session_factory
-    if _session_factory is None:
-        _session_factory = get_session_factory()
+
+    # Fast path: check if already initialized without acquiring lock
+    if _session_factory is not None:
+        return _session_factory
+
+    async with _session_factory_lock:
+        # Double-check after acquiring lock
+        if _session_factory is None:
+            _session_factory = get_session_factory()
+
     return _session_factory
 
 
@@ -30,7 +40,7 @@ async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
 
     The session is automatically committed and closed after the request.
     """
-    factory = _get_factory()
+    factory = await _get_factory()
     async with factory() as session:
         try:
             yield session
@@ -59,7 +69,7 @@ class DatabaseSession:
 
     async def __aenter__(self) -> AsyncSession:
         """Enter context and create session."""
-        factory = _get_factory()
+        factory = await _get_factory()
         self._session = factory()
         # Don't call begin() - session factory already handles transactions
         return self._session

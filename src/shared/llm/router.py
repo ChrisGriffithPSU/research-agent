@@ -429,10 +429,6 @@ class LLMRouterFactory:
         return LLMRouter(providers={})
 
 
-# Remove the old global singleton and get_publisher function
-# The new pattern uses explicit dependency injection
-
-
 __all__ = [
     "LLMRouter",
     "LLMRouterFactory",

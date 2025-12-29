@@ -21,6 +21,8 @@ from src.shared.exceptions.llm import (
     LLMInvalidResponseError,
 )
 
+logger = logging.getLogger(__name__)
+
 
 # Pricing per 1M tokens (as of Dec 2024 - update as needed)
 ANTHROPIC_PRICING = {
@@ -152,10 +154,6 @@ class AnthropicClient(BaseLLMClient):
         Uses get_available_models() instead of creating completions
         to avoid consuming tokens and incurring costs.
         """
-        import logging
-
-        logger = logging.getLogger(__name__)
-
         try:
             # Check available models as a lightweight health check
             # This doesn't consume tokens or cost money

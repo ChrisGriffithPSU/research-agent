@@ -7,6 +7,7 @@ from typing import Any, Callable, Optional
 
 from src.shared.utils.cache.keys import build_cache_key, build_hashed_cache_key
 from src.shared.utils.cache.serializers import JSONSerializer, Serializer
+from src.shared.constants import MAX_CACHE_KEY_LENGTH
 
 
 logger = logging.getLogger(__name__)
@@ -184,7 +185,7 @@ def _build_key_from_args(args: tuple, kwargs: dict, namespace: str, func: Callab
     
     # Hash if too long
     key_str = ":".join(parts)
-    if len(key_str) > 50:
+    if len(key_str) > MAX_CACHE_KEY_LENGTH:
         key_str = build_hashed_cache_key(namespace, key_str)
     
     return key_str
