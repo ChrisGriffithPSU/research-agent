@@ -1,0 +1,496 @@
+---
+alwaysApply: false
+---
+Subagent Review for Independent Validation
+   - Create a "fresh set of eyes" review by spawning a subagent with identical context
+   - The subagent must NOT see the original implementation
+   - Subagent independently writes its own stub version based on requirements
+   - Compare subagent stubs against original stubs to identify gaps
+   - Document discrepancies and validate against code-quality.mdc principles
+
+**Subagent Review Process**
+
+The purpose of the subagent review is to catch blind spots that occur when the same model that writes code also reviews it. This simulates having a second senior engineer review the work independently.
+
+```
+Subagent Review Workflow
+========================
+
+Step 1: Prepare Review Package
+- Extract component requirements and constraints
+- Gather code-quality.mdc principles relevant to this component
+- Include integration context and dependencies
+- DO NOT include the original implementation
+
+Step 2: Subagent Analysis (Fresh Instance)
+- Independent analysis using thoughtbox
+- Write reference implementation following code-quality.mdc strictly
+- Document assumptions and design decisions
+- Identify potential issues without knowing original approach
+
+Step 3: Comparison and Gap Analysis
+- Compare subagent reference vs original implementation
+- Identify design decisions that differ
+- Evaluate each difference against code-quality.mdc principles
+- Document findings: "Original approach vs Reference approach"
+
+Step 4: Resolution
+- For each gap, evaluate which approach is better
+- Update original implementation or document justification
+- Repeat subagent review if major changes made
+```
+
+**Subagent Review Template**
+
+```
+Subagent Review - [Component Name]
+==================================
+
+Review Package Provided:
+- Component responsibility: [Brief description]
+- Integration requirements: [Dependencies, interfaces]
+- code-quality.mdc principles to follow: [List relevant principles]
+- Constraints: [Performance, reliability, etc.]
+
+Subagent Reference Implementation:
+```python
+# Reference code written by subagent (never seen original)
+[Reference stub following code-quality.mdc patterns]
+```
+
+Comparison Analysis:
+| Aspect | Original Stub | Subagent Reference | Gap? | code-quality.mdc Violation? |
+|--------|--------------|-------------------|------|---------------------------|
+| State/Dependency Separation | [Yes/No] | [Yes/No] | | |
+| Dependency Inversion | [Yes/No] | [Yes/No] | | |
+| Error Handling | [Yes/No] | [Yes/No] | | |
+| Observability | [Yes/No] | [Yes/No] | | |
+| Type Safety | [Yes/No] | [Yes/No] | | |
+
+Findings:
+1. [Gap 1]: [Description of difference]
+   - Original: [What original does]
+   - Reference: [What subagent did]
+   - Recommendation: [Which to use and why]
+
+2. [Gap 2]: ...
+
+Resolution:
+- [ ] Update original implementation to match reference
+- [ ] Keep original with justification
+- [ ] Request clarification on requirements
+```
+
+**Example Subagent Review**
+
+```
+Subagent Review - DocumentContext (State Management Pattern)
+============================================================
+
+Review Package Provided:
+- Component responsibility: Immutable context for document processing
+- Dependencies: database, ocr_client, nlp_client, message_queue
+- code-quality.mdc principles: State/Dependency Separation, Type Safety
+- Constraints: Must fail fast, no lazy loading
+
+Subagent Reference Implementation:
+```python
+from typing import TypedDict, Generic, TypeVar, Any
+from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+
+@dataclass(frozen=True)
+class DatabaseClient:
+    """Type-safe database client interface."""
+    connection_string: str
+    pool_size: int
+
+@dataclass(frozen=True)
+class OCRClient:
+    """Type-safe OCR client interface."""
+    api_endpoint: str
+    timeout_seconds: int
+
+@dataclass(frozen=True)
+class NLPClient:
+    """Type-safe NLP client interface."""
+    api_endpoint: str
+    model_name: str
+
+@dataclass(frozen=True)
+class MessageQueueClient:
+    """Type-safe message queue client interface."""
+    queue_name: str
+    prefetch_count: int
+
+class ProcessingContext(ABC, Generic[State]):
+    """Immutable context containing dependencies that remain constant during processing."""
+
+    @property
+    @abstractmethod
+    def config(self) -> dict[str, Any]:
+        """Configuration values for processing."""
+        ...
+
+    @property
+    @abstractmethod
+    def services(self) -> dict[str, Any]:
+        """Service clients needed for processing."""
+        ...
+
+@dataclass(frozen=True)
+class DocumentContext(ProcessingContext[ProcessingState]):
+    """Immutable context for document processing with type-safe dependencies."""
+    config: dict[str, Any]
+    database: DatabaseClient
+    ocr_client: OCRClient
+    nlp_client: NLPClient
+    message_queue: MessageQueueClient
+
+    def __post_init__(self):
+        """Validate all dependencies are non-None."""
+        if self.database is None:
+            raise ValueError("database client is required")
+        if self.ocr_client is None:
+            raise ValueError("OCR client is required")
+        if self.nlp_client is None:
+            raise ValueError("NLP client is required")
+        if self.message_queue is None:
+            raise ValueError("message queue client is required")
+```
+
+Comparison Analysis:
+| Aspect | Original Stub | Subagent Reference | Gap? | code-quality.mdc Violation? |
+|--------|--------------|-------------------|------|---------------------------|
+| State/Dependency Separation | Yes | Yes | No | None |
+| Type Safety | No (used Any) | Yes (specific types) | Yes | Primitive Obsession |
+| Immutability | No (mutable dataclass) | Yes (frozen=True) | Yes | State Mutation Risk |
+| Validation | No | Yes (__post_init__) | Yes | Defensive Programming |
+
+Findings:
+1. Type Safety Gap: Original uses `Any` for all service clients, subagent uses specific types
+   - Original: `database: Any`
+   - Reference: `database: DatabaseClient`
+   - Recommendation: Use reference approach to avoid primitive obsession
+
+2. Immutability Gap: Original mutable dataclass, subagent uses frozen=True
+   - Original: `@dataclass class DocumentContext`
+   - Reference: `@dataclass(frozen=True) class DocumentContext`
+   - Recommendation: Use frozen=True to prevent accidental state mutation
+
+3. Validation Gap: Original has no validation, subagent validates in __post_init__
+   - Original: No post-init validation
+   - Reference: Validates non-None in __post_init__
+   - Recommendation: Add __post_init__ validation for fail-fast behavior
+
+Resolution:
+- [x] Update original implementation to use type-safe interfaces
+- [x] Add frozen=True to DocumentContext dataclass
+- [x] Add __post_init__ validation
+```
+
+**TODO List Integration**
+
+```
+TODO: Subagent Review - [Component Name]
+=========================================
+
+Preparation:
+- [ ] Extract component requirements for subagent review package
+- [ ] List code-quality.mdc principles to verify
+- [ ] Prepare integration context and dependencies
+
+Subagent Analysis:
+- [ ] Spawn subagent with review package (without original implementation)
+- [ ] Subagent uses thoughtbox for independent analysis
+- [ ] Subagent writes reference implementation following code-quality.mdc
+
+Comparison:
+- [ ] Compare subagent reference vs original stub
+- [ ] Document each difference with aspect, original, reference
+- [ ] Identify gaps violating code-quality.mdc principles
+
+Resolution:
+- [ ] For each gap, evaluate which approach is better
+- [ ] Update original implementation or document justification
+- [ ] Repeat subagent review if major changes made
+- [ ] Get approval before proceeding
+```
+
+
+**Example Stubs Following code-quality.mdc Patterns**
+
+```python
+# State Management Pattern
+from typing import TypedDict, Generic, TypeVar, Any
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+
+State = TypeVar("State")
+
+class ProcessingState(TypedDict):
+    request_id: str
+    current_step: str
+    input_data: dict[str, Any]
+    accumulated_results: list[dict]
+    errors: list[str]
+
+
+class ProcessingContext(ABC, Generic[State]):
+    """Immutable context containing dependencies that remain constant during processing."""
+
+    @property
+    @abstractmethod
+    def config(self) -> dict[str, Any]:
+        """Configuration values for processing."""
+        # TODO: Return immutable configuration dictionary
+        # TODO: Validate required config keys exist at initialization
+        ...
+
+    @property
+    @abstractmethod
+    def services(self) -> dict[str, Any]:
+        """Service clients needed for processing."""
+        # TODO: Return service clients dictionary keyed by service name
+        # TODO: Ensure all required services are injected at construction
+        # TODO: Do not lazy-load services - fail fast at initialization
+        ...
+
+
+@dataclass
+class DocumentContext(ProcessingContext[ProcessingState]):
+    """Context for document processing with all dependencies."""
+    config: dict[str, Any]
+    database: Any
+    ocr_client: Any
+    nlp_client: Any
+    message_queue: Any
+    # TODO: Add type hints for each service client (e.g., DatabaseClient, OCRClient)
+    # TODO: Validate all dependencies are non-None in __post_init__
+    # TODO: Consider making services read-only (@property) if they should not be replaced
+
+
+# Factory Pattern
+from functools import lru_cache
+
+@dataclass
+class ServiceConfig:
+    """Configuration for service instantiation."""
+    environment: str = "development"
+    timeout_seconds: int = 30
+    retry_attempts: int = 3
+    # TODO: Add max_connection_pool_size for database
+    # TODO: Add circuit_breaker_threshold for external service calls
+    # TODO: Validate configuration values (timeouts > 0, valid environment)
+
+
+class DependencyFactory:
+    """Creates and configures all service dependencies."""
+
+    def __init__(self, settings: dict[str, Any]):
+        self.settings = settings
+        # TODO: Validate required settings keys exist
+        # TODO: Load settings from environment variables with defaults
+        ...
+
+    def create_database(self, config: ServiceConfig = None) -> Any:
+        """Create database connection with configuration."""
+        # TODO: Use asyncpg for PostgreSQL connections
+        # TODO: Configure connection pool based on environment
+        # TODO: Implement connection health checks
+        # TODO: Add retry logic for transient connection failures
+        ...
+
+    def create_ocr_client(self, config: ServiceConfig = None) -> Any:
+        """Create OCR API client with retry logic."""
+        # TODO: Wrap external OCR API with retry decorator
+        # TODO: Implement exponential backoff for retries
+        # TODO: Add timeout handling (raise on timeout)
+        # TODO: Cache client instance (lru_cache) for reuse
+        ...
+
+    def create_nlp_client(self, config: ServiceConfig = None) -> Any:
+        """Create NLP API client with fallback."""
+        # TODO: Implement primary/fallback client strategy
+        # TODO: Add circuit breaker pattern for upstream failures
+        # TODO: Log all API calls with correlation IDs
+        ...
+
+    def create_message_queue(self, config: ServiceConfig = None) -> Any:
+        """Create message queue producer."""
+        # TODO: Use aio-pika for RabbitMQ async operations
+        # TODO: Implement connection pooling for producers
+        # TODO: Add dead letter queue for failed messages
+        # TODO: Ensure message serialization (JSON by default)
+        ...
+
+
+# State Machine Pattern
+from enum import Enum
+from typing import Callable
+
+class ProcessingStep(Enum):
+    VALIDATING = "validating"
+    OCR_PROCESSING = "ocr_processing"
+    NLP_ANALYSIS = "nlp_analysis"
+    STORING = "storing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    # TODO: Add CANCELLED state for user-initiated cancellation
+    # TODO: Add TIMEOUT state for long-running workflows
+
+
+class ProcessingStateMachine:
+    """Manages state transitions for document processing workflow."""
+
+    def __init__(self):
+        self._transitions: dict[tuple, Callable] = {}
+        self._entry_actions: dict[ProcessingStep, Callable] = {}
+        # TODO: Initialize with valid initial state (VALIDATING)
+        # TODO: Validate no duplicate transitions (same from_state)
+        ...
+
+    def add_transition(self, from_state: ProcessingStep, to_state: ProcessingStep,
+                       condition: Callable = None, action: Callable = None) -> None:
+        """Add valid state transition with optional condition and action."""
+        # TODO: Validate from_state and to_state are different
+        # TODO: Store condition function for runtime evaluation
+        # TODO: Store action function to execute during transition
+        # TODO: Prevent duplicate transitions (raise ValueError)
+        ...
+
+    def on_enter(self, state: ProcessingStep, action: Callable) -> None:
+        """Register action to execute when entering a state."""
+        # TODO: Store action in _entry_actions dictionary
+        # TODO: Execute action after state transition completes
+        # TODO: Handle action exceptions (log and transition to FAILED)
+        ...
+
+    def execute_transition(self, current_state: ProcessingStep, event: Any = None) -> ProcessingStep:
+        """Execute transition from current state based on event."""
+        # TODO: Look up valid transitions for current_state
+        # TODO: Evaluate condition functions if present
+        # TODO: Execute action function if present
+        # TODO: Update and return new state
+        # TODO: Raise error if no valid transition exists
+        ...
+    # TODO: Add method to get current state
+    # TODO: Add method to get valid transitions from current state
+    # TODO: Add method to check if transition is valid (dry-run)
+
+
+# Result Type Pattern
+from dataclasses import dataclass
+from typing import TypeVar, Generic, Optional
+
+T = TypeVar("T")
+
+@dataclass
+class Result(Generic[T]):
+    """Result type for operations that can succeed or fail."""
+    success: bool
+    value: Optional[T] = None
+    error: Optional[str] = None
+    # TODO: Add error_code field for categorizing errors
+    # TODO: Add metadata field for additional context
+    # TODO: Ensure either value or error is set (not both, not neither)
+    ...
+
+    @classmethod
+    def ok(cls, value: T) -> "Result[T]":
+        """Create successful result."""
+        # TODO: Validate value is not None (or allow None as valid value?)
+        # TODO: Set success=True, value=value, error=None
+        ...
+
+    @classmethod
+    def fail(cls, error: str, error_code: str = None) -> "Result[T]":
+        """Create failed result."""
+        # TODO: Set success=False, value=None, error=error
+        # TODO: Optionally include error_code for categorization
+        # TODO: Do not raise exception - return Result for caller to handle
+        ...
+
+    def map(self, transform: Callable[[T], Any]) -> "Result[Any]":
+        """Apply transformation to value if successful."""
+        # TODO: If success, apply transform to value and return new Result
+        # TODO: If failure, return new Result with same error (passthrough)
+        ...
+
+    def bind(self, transform: Callable[[T], "Result[Any]"]) -> "Result[Any]":
+        """Chain Result-returning functions."""
+        # TODO: If success, call transform(value) and return its result
+        # TODO: If failure, return this Result (short-circuit)
+        ...
+
+
+# Observability Pattern
+import logging
+import time
+from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
+
+
+class StructuredLogger:
+    """Structured logger with correlation ID support."""
+
+    def __init__(self, name: str, correlation_id: str = None):
+        self.name = name
+        self.correlation_id = correlation_id
+        # TODO: Configure logger with appropriate level (DEBUG in dev, INFO in prod)
+        # TODO: Add correlation_id to all log records automatically
+        ...
+
+    def info(self, message: str, event: str, **extra) -> None:
+        """Log info level event with structured data."""
+        # TODO: Include timestamp in ISO 8601 format
+        # TODO: Include correlation_id in every log entry
+        # TODO: Add user_id and request_id if available in extra
+        # TODO: Use structured logging (JSON format recommended)
+        ...
+
+    def error(self, message: str, event: str, **extra) -> None:
+        """Log error level event with structured data."""
+        # TODO: Include stack trace if exception in extra
+        # TODO: Log with ERROR level (not WARN)
+        # TODO: Include error code and error message separately
+        ...
+
+    def debug(self, message: str, event: str, **extra) -> None:
+        """Log debug level event with structured data."""
+        # TODO: Only log if debug level is enabled
+        # TODO: Include detailed state dumps for debugging
+        ...
+
+
+class Tracer:
+    """Tracing utility for request flow visibility."""
+
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+        # TODO: Accept service name for span attribution
+        # TODO: Initialize tracing backend (OpenTelemetry, etc.)
+        ...
+
+    @contextmanager
+    def span(self, name: str, correlation_id: str = None, input_data: dict = None):
+        """Context manager for tracing operations."""
+        # TODO: Create span with name, correlation_id, and input_data
+        # TODO: Record start_time as high-resolution timestamp
+        # TODO: On exit, record end_time and duration
+        # TODO: On exception, record error in span
+        # TODO: Yield span object for manual annotation
+        span_data = {"name": name, "correlation_id": correlation_id or "unknown",
+                     "start_time": time.time()}
+        try:
+            yield span_data
+            span_data["end_time"] = time.time()
+            span_data["duration_ms"] = (span_data["end_time"] - span_data["start_time"]) * 1000
+        except Exception as e:
+            span_data["error"] = str(e)
+            span_data["error_type"] = type(e).__name__
+            span_data["end_time"] = time.time()
+            span_data["duration_ms"] = (span_data["end_time"] - span_data["start_time"]) * 1000
+            raise
+```

@@ -1,0 +1,173 @@
+---
+alwaysApply: false
+---
+## Phase 1: Problem Decomposition and Understanding
+
+The goal of this phase is to achieve crystal clarity on what we are building before any code is written. This is a non-technical discussion focused on understanding the problem space, user needs, system responsibilities, and integration requirements. The model must ask probing questions across multiple dimensions to extract all relevant context.
+
+### Question Categories
+
+The model should ask questions across the following categories to build a complete understanding of the system:
+
+**Purpose and Value**
+- What problem does this system solve?
+- Why is this system needed now?
+- What value does it provide to users or other systems?
+- How will success be measured?
+- What happens if we do not build this?
+
+**Responsibilities and Scope**
+- What are the core responsibilities of this system?
+- What is explicitly out of scope?
+- What are the boundaries of this system?
+- What decisions is this system allowed to make autonomously?
+- What decisions must be escalated or delegated?
+
+**Users and Consumers**
+- Who will use this system directly?
+- What other systems will depend on this system?
+- How will users interact with it?
+- What is the expected usage pattern (frequent/occasional, real-time/batch)?
+- What is the expected scale of usage?
+
+**Integration Points**
+- What existing systems will this interact with?
+- What data will flow into this system?
+- What data will flow out of this system?
+- Are there external dependencies (APIs, services, databases)?
+- What protocols or interfaces must be supported?
+
+**Data and State**
+- What data must this system store?
+- What data must it process or transform?
+- Are there compliance or security requirements for the data?
+- How long must data be retained?
+- What is the expected data volume and velocity?
+
+**Reliability and Performance**
+- What are the availability requirements?
+- What latency is acceptable?
+- What happens during failures?
+- Are there recovery requirements?
+- What is the expected load profile?
+
+**Example Questions in Practice**
+
+```
+Model: To help me understand what we are building, I have a few questions:
+
+Purpose: What is the primary problem this system addresses? Why is it needed now?
+
+Responsibilities: What are the 3-5 core things this system must do? What is explicitly NOT included?
+
+Users: Who uses this directly? Who depends on this system indirectly? How do they interact with it?
+
+Integration: What existing systems does this connect to? What data comes in? What data goes out?
+
+Data: What needs to be stored? What gets processed but not stored? Any compliance requirements?
+
+Reliability: What is the expected uptime? What happens if components fail? Any latency requirements?
+```
+
+### Problem Decomposition Statement
+
+After gathering context, the model must produce a Problem Decomposition Statement that breaks down the system into its component parts. This statement serves as the blueprint for all subsequent work.
+
+**Structure of the Statement**
+
+```
+Problem Decomposition Statement
+===============================
+
+System Name: [Descriptive name]
+
+Purpose: [2-3 sentence description of what this system accomplishes]
+
+Core Responsibilities:
+1. [Responsibility 1]
+2. [Responsibility 2]
+3. [Responsibility 3]
+[...]
+
+Consumers and Dependencies:
+- Consumed by: [Who/what uses this system]
+- Depends on: [What this system requires]
+- Integrates with: [External systems this connects to]
+
+Data Flow:
+- Input: [What data enters the system and from where]
+- Processing: [How data is transformed]
+- Output: [What data leaves the system and where it goes]
+
+Component Breakdown:
+1. [Component 1]: [Brief description of responsibility]
+2. [Component 2]: [Brief description of responsibility]
+3. [Component 3]: [Brief description of responsibility]
+[...]
+
+Non-Functional Requirements:
+- Performance: [Latency, throughput requirements]
+- Reliability: [Uptime, fault tolerance requirements]
+- Security: [Authentication, authorization requirements]
+- Scalability: [Expected load and growth]
+
+Success Criteria:
+1. [Criterion 1]
+2. [Criterion 2]
+3. [Criterion 3]
+[...]
+```
+
+**Example Problem Decomposition Statement**
+
+```
+Problem Decomposition Statement
+===============================
+
+System Name: Document Processing Service
+
+Purpose: A service that receives documents, extracts key information using
+OCR and NLP, stores the extracted data, and notifies downstream systems
+of completion.
+
+Core Responsibilities:
+1. Accept document uploads via API
+2. Extract text and metadata using OCR
+3. Analyze document content using NLP for entity extraction
+4. Store results in database
+5. Publish completion events to message queue
+
+Consumers and Dependencies:
+- Consumed by: Web application, mobile application, webhook endpoints
+- Depends on: Database, message queue, OCR service, NLP service
+- Integrates with: External OCR API, external NLP API, internal message broker
+
+Data Flow:
+- Input: PDF/DOCX/DOC files uploaded via REST API
+- Processing: File validation, OCR processing, NLP analysis, data validation
+- Output: Extracted text and entities stored in PostgreSQL, completion event
+          published to RabbitMQ
+
+Component Breakdown:
+1. API Layer: Handles file uploads, status queries, error responses
+2. Validation Service: Validates file type, size, format
+3. OCR Processor: Calls external OCR API, handles retries and errors
+4. NLP Analyzer: Extracts entities, key phrases, sentiment
+5. Storage Repository: Persists results to PostgreSQL
+6. Event Publisher: Publishes completion/failure events to queue
+
+Non-Functional Requirements:
+- Performance: P95 latency under 5 seconds for documents under 10MB
+- Reliability: 99.9% uptime, automatic retry on transient failures
+- Security: Authenticated access, encrypted storage, audit logging
+- Scalability: Support 100 concurrent uploads, auto-scale under load
+
+Success Criteria:
+1. Documents processed within SLA
+2. Extraction accuracy above 95%
+3. Zero data loss
+4. Complete audit trail
+5. Integration tests passing
+```
+
+The user reviews and approves this statement or requests revisions. Do not proceed to Phase 2 until the statement is approved.

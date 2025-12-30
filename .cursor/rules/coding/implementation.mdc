@@ -1,0 +1,213 @@
+---
+alwaysApply: false
+---
+### Step 3: Implementation
+
+With stubs approved, implement each component by filling in the logic. This step proceeds component by component, with planning and review for each.
+
+**Implementation Process for Each Component**
+
+```
+1. Plan with thoughtbox
+   - Review the approved stub
+   - Identify the core algorithmic challenge
+   - Consider edge cases and failure modes
+   - Plan the step-by-step logic
+   - Consider performance implications
+
+2. Implement the component
+   - Write the actual implementation
+   - Use context7 for library integration
+   - Include all error handling
+   - Add observability (logging, metrics, tracing)
+   - Follow code-quality.mdc patterns strictly
+```
+
+**Using thoughtbox Effectively**
+
+For each TODO item, use thoughtbox to work through the implementation systematically. The thoughtbox process should cover:
+
+```
+1. Problem Analysis
+   - What is the core function of this component?
+   - What are the inputs and expected outputs?
+   - What are the edge cases to handle?
+   - What can go wrong?
+
+2. Algorithm Design
+   - What is the step-by-step logic?
+   - What data structures are needed?
+   - What is the time and space complexity?
+   - Are there simpler alternatives?
+
+3. Integration Considerations
+   - How does this component interact with dependencies?
+   - What error conditions must be handled?
+   - What observability is needed?
+
+4. Quality Checks
+   - Does this follow code-quality.mdc patterns?
+   - Is it testable?
+   - Is it debuggable?
+   - Is it resistant to bugs?
+
+Example thoughtbox session for implementing an OCR processor:
+
+Thought 1: The OCR processor needs to accept a document, call the external OCR API,
+and return extracted text and confidence scores. Key considerations: retry logic
+for transient failures, timeout handling, response parsing, error classification.
+
+Thought 2: The algorithm is straightforward - validate input, call API with retry,
+parse response, return result. Edge cases: API timeout, invalid response format,
+rate limiting, API errors. Each edge case needs specific handling.
+
+Thought 3: Integration with the OCR client dependency. The client is injected
+through the context. We need to handle: client failures, timeout exceptions,
+parsing errors. Use Result type to encapsulate success/failure.
+
+Thought 4: Quality checks: Is the retry logic configurable? Yes, through config.
+Is the error handling consistent with codebase patterns? Yes, using Result type.
+Is there observability? Yes, logging before/after API calls, metrics for success/error.
+```
+
+**Using context7 for Library Integration**
+
+When implementing components that use external libraries or packages, use context7 to retrieve documentation and ensure correct usage:
+
+```
+For each TODO item that interfaces with a library:
+1. Use mcp_context7_resolve-library-id to find the library
+2. Use mcp_context7_query-docs to get specific documentation
+3. Apply the patterns from documentation to the implementation
+4. Verify against code-quality.mdc principles
+
+Example: When implementing the message queue publisher
+- Use context7 to get RabbitMQ/pika documentation
+- Review connection handling, message publishing, error handling
+- Apply patterns from documentation
+- Ensure consistent with codebase observability patterns
+```
+
+**TODO List Template for Implementation**
+
+```
+TODO: Implement - [Component Name]
+===================================
+
+Planning:
+- [ ] Use thoughtbox to plan the implementation
+- [ ] Identify core algorithm and data flow
+- [ ] List edge cases and failure modes
+- [ ] Plan error handling strategy
+
+Implementation:
+- [ ] Write the implementation following the stub
+- [ ] Add all error handling (Result types or exceptions)
+- [ ] Include observability (logging, metrics, tracing)
+- [ ] Add fault tolerance
+
+Review:
+- [ ] Review against code-quality.mdc
+- [ ] Verify SOLID principles are followed
+- [ ] Check functional patterns are applied correctly
+- [ ] Confirm defensive programming
+- [ ] Validate observability is complete
+- [ ] Get approval before moving to next component
+```
+
+**Example TODO List for Implementation**
+
+```
+TODO: Implement - Document Processing Service
+==============================================
+
+Planning:
+- [ ] Use thoughtbox to plan the complete processing workflow
+- [ ] Identify the main algorithm: validate -> OCR -> NLP -> store -> notify
+- [ ] List edge cases: invalid file, API failures, partial results
+- [ ] Plan error handling: which errors retry, which fail fast
+
+Implementation - Validation Service:
+- [ ] Use thoughtbox for validation logic
+- [ ] Implement file type validation
+- [ ] Implement file size validation
+- [ ] Add error Result generation
+- [ ] Add logging and metrics
+- [ ] Review against code-quality.mdc
+
+Implementation - OCR Processor:
+- [ ] Use thoughtbox for OCR processing logic
+- [ ] Use context7 to review pika/RabbitMQ documentation
+- [ ] Implement API call with retry logic
+- [ ] Implement response parsing
+- [ ] Add error classification
+- [ ] Add observability
+- [ ] Review against code-quality.mdc
+
+Implementation - NLP Analyzer:
+- [ ] Use thoughtbox for NLP analysis logic
+- [ ] Implement entity extraction
+- [ ] Implement key phrase extraction
+- [ ] Implement sentiment analysis
+- [ ] Add error handling
+- [ ] Add observability
+- [ ] Review against code-quality.mdc
+
+Implementation - Storage Repository:
+- [ ] Use thoughtbox for database operations
+- [ ] Use context7 to review asyncpg/PostgreSQL documentation
+- [ ] Implement document storage
+- [ ] Implement result storage
+- [ ] Add transaction handling
+- [ ] Add observability
+- [ ] Review against code-quality.mdc
+
+Implementation - Event Publisher:
+- [ ] Use thoughtbox for event publishing logic
+- [ ] Use context7 to review message queue patterns
+- [ ] Implement success event publishing
+- [ ] Implement failure event publishing
+- [ ] Add retry logic
+- [ ] Add observability
+- [ ] Review against code-quality.mdc
+```
+
+## Repeatable Process Summary
+
+This process is repeatable for every implementation:
+
+**Phase 1: Understand**
+- Ask non-technical questions across categories
+- Produce Problem Decomposition Statement
+- Get approval before proceeding
+
+**Phase 2: Code**
+- Step 1: Integration Planning
+  - Identify dependencies and interfaces
+  - Plan integration approach
+  - Create TODO list
+  - Get approval
+
+- Step 2: Architectural Planning
+  - For each component:
+    - Use thoughtbox to plan
+    - Write stub following code-quality.mdc patterns
+    - Review against code-quality.mdc
+    - Get approval
+
+- Step 3: Implementation
+  - For each component:
+    - Use thoughtbox to plan implementation
+    - Use context7 for library documentation
+    - Write implementation
+    - Review against code-quality.mdc
+    - Get approval
+
+**Key Principles**
+
+1. Never skip Phase 1 - understanding precedes implementation
+2. Never write stubs and implementation together - separate planning from execution
+3. Never implement without thoughtbox - think through each component
+4. Never use a library without context7 - verify correct usage
+5. Always review against code-quality.mdc - maintain quality standards
+6. Always get approval before proceeding - ensure alignment with user expectations

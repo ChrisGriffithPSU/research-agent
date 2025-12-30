@@ -1,0 +1,415 @@
+---
+alwaysApply: false
+---
+### Step 2: Architectural Planning
+
+With integration understood, create the file structure and class/function stubs. Each component should be planned as a separate item, with stubs written and reviewed before moving to the next.
+
+**Stub Writing Principles**
+
+Stubs are not implementations. A stub contains:
+- Class or function declaration
+- Brief comment (2-3 lines maximum) describing purpose
+- Parameter types and return types
+- TODO comment for implementation
+
+Stubs follow the patterns from code-quality.mdc, including:
+- Separation of mutable state from immutable dependencies
+- Factory pattern for complex initialization
+- State machine patterns for complex workflows
+- Observability hooks from the beginning
+- Error handling strategy
+- Graceful degradation patterns
+
+**Component-by-Component Process**
+
+For each component:
+
+```
+1. Plan using thoughtbox
+   - Review component responsibility
+   - Identify what changes often (make configurable)
+   - Identify what must never change (enforce with types)
+   - Identify assumptions to document
+   - Define minimal interface requirements
+
+2. Write stub
+   - Follow code-quality.mdc patterns
+   - Include observability hooks
+   - Define error handling
+   - Use Result types or exceptions consistently
+```
+
+**Example Stubs Following code-quality.mdc Patterns**
+
+```python
+# State Management Pattern
+from typing import TypedDict, Generic, TypeVar, Any
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+
+State = TypeVar("State")
+
+class ProcessingState(TypedDict):
+    request_id: str
+    current_step: str
+    input_data: dict[str, Any]
+    accumulated_results: list[dict]
+    errors: list[str]
+
+
+class ProcessingContext(ABC, Generic[State]):
+    """Immutable context containing dependencies that remain constant during processing."""
+
+    @property
+    @abstractmethod
+    def config(self) -> dict[str, Any]:
+        """Configuration values for processing."""
+        # TODO: Return immutable configuration dictionary
+        # TODO: Validate required config keys exist at initialization
+        # TODO: Use Mapping[str, Any] for read-only access
+        ...
+
+    @property
+    @abstractmethod
+    def services(self) -> dict[str, Any]:
+        """Service clients needed for processing."""
+        # TODO: Return service clients dictionary keyed by service name
+        # TODO: Ensure all required services are injected at construction
+        # TODO: Do not lazy-load services - fail fast at initialization
+        # TODO: Consider read-only view of services dict
+        ...
+
+
+@dataclass
+class DocumentContext(ProcessingContext[ProcessingState]):
+    """Context for document processing with all dependencies."""
+    config: dict[str, Any]
+    database: Any
+    ocr_client: Any
+    nlp_client: Any
+    message_queue: Any
+    # TODO: Add type hints for each service client (e.g., DatabaseClient, OCRClient)
+    # TODO: Validate all dependencies are non-None in __post_init__
+    # TODO: Consider making services read-only (@property) if they should not be replaced
+    # TODO: Use frozen=True dataclass for immutability
+    # TODO: Add validation that config has required keys in __post_init__
+
+
+# Factory Pattern
+from functools import lru_cache
+
+@dataclass
+class ServiceConfig:
+    """Configuration for service instantiation."""
+    environment: str = "development"
+    timeout_seconds: int = 30
+    retry_attempts: int = 3
+    # TODO: Add max_connection_pool_size for database connections
+    # TODO: Add circuit_breaker_threshold for external service calls
+    # TODO: Add batch_size for batch processing operations
+    # TODO: Validate configuration values (timeouts > 0, valid environment)
+    # TODO: Add validation for required fields (non-None checks)
+
+
+class DependencyFactory:
+    """Creates and configures all service dependencies."""
+
+    def __init__(self, settings: dict[str, Any]):
+        self.settings = settings
+        # TODO: Validate required settings keys exist at initialization
+        # TODO: Load settings from environment variables with defaults
+        # TODO: Validate settings values are within acceptable ranges
+        # TODO: Consider using a settings validation schema (Pydantic)
+        ...
+
+    def create_database(self, config: ServiceConfig = None) -> Any:
+        """Create database connection with configuration."""
+        # TODO: Use asyncpg for PostgreSQL async connections
+        # TODO: Configure connection pool based on environment (size, timeout)
+        # TODO: Implement connection health checks on creation
+        # TODO: Add retry logic for transient connection failures with exponential backoff
+        # TODO: Log connection creation with correlation ID
+        ...
+
+    def create_ocr_client(self, config: ServiceConfig = None) -> Any:
+        """Create OCR API client with retry logic."""
+        # TODO: Wrap external OCR API with retry decorator (tenacity or custom)
+        # TODO: Implement exponential backoff for retries (base delay, max retries)
+        # TODO: Add timeout handling (raise asyncio.TimeoutError on timeout)
+        # TODO: Cache client instance using lru_cache for reuse
+        # TODO: Add circuit breaker pattern to prevent cascading failures
+        # TODO: Log all API calls with correlation IDs and timing
+        ...
+
+    def create_nlp_client(self, config: ServiceConfig = None) -> Any:
+        """Create NLP API client with fallback."""
+        # TODO: Implement primary/fallback client strategy for resilience
+        # TODO: Add circuit breaker pattern for upstream NLP service failures
+        # TODO: Log all API calls with correlation IDs for debugging
+        # TODO: Add request timeout and retry configuration
+        # TODO: Implement response validation to handle malformed responses
+        ...
+
+    def create_message_queue(self, config: ServiceConfig = None) -> Any:
+        """Create message queue producer."""
+        # TODO: Use aio-pika for RabbitMQ async operations
+        # TODO: Implement connection pooling for producers
+        # TODO: Add dead letter queue configuration for failed messages
+        # TODO: Ensure message serialization (JSON by default, support others)
+        # TODO: Add message acknowledgment handling
+        # TODO: Implement connection health monitoring
+        ...
+
+
+# State Machine Pattern
+from enum import Enum
+from typing import Callable
+
+class ProcessingStep(Enum):
+    VALIDATING = "validating"
+    OCR_PROCESSING = "ocr_processing"
+    NLP_ANALYSIS = "nlp_analysis"
+    STORING = "storing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    # TODO: Add CANCELLED state for user-initiated cancellation
+    # TODO: Add TIMEOUT state for long-running workflows
+    # TODO: Add PAUSED state for workflow suspension
+
+
+class ProcessingStateMachine:
+    """Manages state transitions for document processing workflow."""
+
+    def __init__(self):
+        self._transitions: dict[tuple, Callable] = {}
+        self._entry_actions: dict[ProcessingStep, Callable] = {}
+        self._current_state: ProcessingStep = None
+        # TODO: Initialize with valid initial state (VALIDATING)
+        # TODO: Validate no duplicate transitions (same from_state pair)
+        # TODO: Register built-in transitions for workflow flow
+        # TODO: Add state history tracking for debugging
+        ...
+
+    def add_transition(self, from_state: ProcessingStep, to_state: ProcessingStep,
+                       condition: Callable = None, action: Callable = None) -> None:
+        """Add valid state transition with optional condition and action."""
+        # TODO: Validate from_state and to_state are different
+        # TODO: Store condition function for runtime evaluation
+        # TODO: Store action function to execute during transition
+        # TODO: Prevent duplicate transitions (raise ValueError)
+        # TODO: Validate condition and action are callable if provided
+        ...
+
+    def on_enter(self, state: ProcessingStep, action: Callable) -> None:
+        """Register action to execute when entering a state."""
+        # TODO: Store action in _entry_actions dictionary keyed by state
+        # TODO: Execute action after state transition completes
+        # TODO: Handle action exceptions (log error and transition to FAILED)
+        # TODO: Allow multiple actions per state (list of actions)
+        ...
+
+    def execute_transition(self, current_state: ProcessingStep, event: Any = None) -> ProcessingStep:
+        """Execute transition from current state based on event."""
+        # TODO: Look up valid transitions for current_state
+        # TODO: Evaluate condition functions if present (all must pass)
+        # TODO: Execute action function if present during transition
+        # TODO: Update and return new state
+        # TODO: Raise error if no valid transition exists
+        # TODO: Log state transitions for debugging
+        ...
+
+    def get_current_state(self) -> ProcessingStep:
+        """Return the current state."""
+        # TODO: Return _current_state
+        # TODO: Handle case where state machine not initialized
+        ...
+
+    def get_valid_transitions(self, state: ProcessingStep) -> list[ProcessingStep]:
+        """Return list of valid next states from current state."""
+        # TODO: Look up transitions from given state
+        # TODO: Return list of valid to_state values
+        ...
+
+    def can_transition(self, state: ProcessingStep, event: Any = None) -> bool:
+        """Check if transition is valid without executing it (dry-run)."""
+        # TODO: Look up transitions for current state
+        # TODO: Evaluate conditions if present
+        # TODO: Return True if any valid transition exists
+        ...
+
+
+# Result Type Pattern
+from dataclasses import dataclass
+from typing import TypeVar, Generic, Optional
+
+T = TypeVar("T")
+
+@dataclass
+class Result(Generic[T]):
+    """Result type for operations that can succeed or fail."""
+    success: bool
+    value: Optional[T] = None
+    error: Optional[str] = None
+    # TODO: Add error_code field for categorizing errors (e.g., "VALIDATION_ERROR")
+    # TODO: Add metadata field for additional context (dict[str, Any])
+    # TODO: Add correlation_id field for request tracing
+    # TODO: Ensure either value or error is set (not both, not neither)
+    # TODO: Validate in __post_init__ that success implies value is not None (unless T is None)
+    ...
+
+    @classmethod
+    def ok(cls, value: T) -> "Result[T]":
+        """Create successful result."""
+        # TODO: Validate value is not None (or allow None as valid value for T = None)
+        # TODO: Set success=True, value=value, error=None
+        # TODO: Allow passing metadata and correlation_id as optional params
+        ...
+
+    @classmethod
+    def fail(cls, error: str, error_code: str = None) -> "Result[T]":
+        """Create failed result."""
+        # TODO: Set success=False, value=None, error=error
+        # TODO: Include error_code for categorization
+        # TODO: Do not raise exception - return Result for caller to handle
+        # TODO: Allow passing metadata and correlation_id as optional params
+        ...
+
+    def map(self, transform: Callable[[T], U]) -> "Result[U]":
+        """Apply transformation to value if successful."""
+        # TODO: If success, apply transform to value and return new Result
+        # TODO: If failure, return new Result with same error (passthrough)
+        # TODO: Handle transform exceptions (wrap in failure Result)
+        ...
+
+    def bind(self, transform: Callable[[T], "Result[U]"]) -> "Result[U]":
+        """Chain Result-returning functions (monadic bind)."""
+        # TODO: If success, call transform(value) and return its result
+        # TODO: If failure, return this Result (short-circuit)
+        # TODO: Handle transform exceptions (wrap in failure Result)
+        ...
+
+
+# Observability Pattern
+import logging
+import time
+from contextlib import contextmanager
+
+logger = logging.getLogger(__name__)
+
+
+class StructuredLogger:
+    """Structured logger with correlation ID support."""
+
+    def __init__(self, name: str, correlation_id: str = None):
+        self.name = name
+        self.correlation_id = correlation_id
+        # TODO: Configure logger with appropriate level (DEBUG in dev, INFO in prod)
+        # TODO: Add correlation_id to all log records automatically
+        # TODO: Set up JSON formatter for structured logging
+        # TODO: Consider using structlog for easier structured logging
+        ...
+
+    def info(self, message: str, event: str, **extra) -> None:
+        """Log info level event with structured data."""
+        # TODO: Include timestamp in ISO 8601 format
+        # TODO: Include correlation_id in every log entry
+        # TODO: Add user_id, request_id, and other context if available in extra
+        # TODO: Use structured logging (JSON format recommended)
+        # TODO: Add event type and severity level to log record
+        ...
+
+    def error(self, message: str, event: str, **extra) -> None:
+        """Log error level event with structured data."""
+        # TODO: Include stack trace if exception is in extra
+        # TODO: Log with ERROR level (not WARN)
+        # TODO: Include error_code and error_type in log record
+        # TODO: Add request context (correlation_id, user_id) to error logs
+        # TODO: Consider including relevant state data for debugging
+        ...
+
+    def debug(self, message: str, event: str, **extra) -> None:
+        """Log debug level event with structured data."""
+        # TODO: Only log if debug level is enabled on logger
+        # TODO: Include detailed state dumps for debugging
+        # TODO: Add function/module/line number for traceback
+        # TODO: Consider adding timing information for performance debugging
+        ...
+
+
+class Tracer:
+    """Tracing utility for request flow visibility."""
+
+    def __init__(self, enabled: bool = True, service_name: str = "unknown"):
+        self.enabled = enabled
+        self.service_name = service_name
+        # TODO: Accept service name for span attribution
+        # TODO: Initialize tracing backend (OpenTelemetry, etc.) if enabled
+        # TODO: Configure sampling rate for production
+        # TODO: Set up exporter for span data (console, OTLP, etc.)
+        ...
+
+    @contextmanager
+    def span(self, name: str, correlation_id: str = None, input_data: dict = None):
+        """Context manager for tracing operations."""
+        # TODO: Create span with name, correlation_id, and input_data
+        # TODO: Record start_time as high-resolution timestamp (time.perf_counter)
+        # TODO: On exit, record end_time and calculate duration_ms
+        # TODO: On exception, record error in span with error_type and stack trace
+        # TODO: Yield span object for manual annotation (add events, set attributes)
+        # TODO: Add span to active context for nested spans
+```
+
+**TODO List Template for Architectural Planning**
+
+```
+TODO: Architectural Planning - [Component Name]
+================================================
+
+Planning:
+- [ ] Use thoughtbox to plan component design
+- [ ] Identify mutable state vs immutable dependencies
+- [ ] Define interfaces based on client needs
+- [ ] Plan observability hooks
+
+Stub Writing:
+- [ ] Write class/function stub following code-quality.mdc patterns
+- [ ] Include docstring with purpose and parameters
+- [ ] Define types for inputs, outputs, and state
+- [ ] Add TODO comment for implementation
+
+Review:
+- [ ] Review against Single Responsibility Principle
+- [ ] Verify Dependency Inversion is applied
+- [ ] Check defensive programming patterns
+- [ ] Confirm observability hooks included
+- [ ] Get approval before proceeding to next component
+```
+
+**Example TODO List for Architectural Planning**
+
+```
+TODO: Architectural Planning - Document Processing Service
+===========================================================
+
+Planning:
+- [ ] Use thoughtbox to analyze component responsibilities
+- [ ] Identify state (request_id, current_step, results) vs dependencies (config, services)
+- [ ] Define minimal interfaces for each dependency
+- [ ] Plan where to add logging, metrics, tracing
+
+Stubs:
+- [ ] Write DocumentContext class following ProcessingContext pattern
+- [ ] Write DependencyFactory class with factory methods
+- [ ] Write ProcessingStateMachine class for workflow management
+- [ ] Write Result[T] type for operation results
+- [ ] Write StructuredLogger class for observability
+- [ ] Write Tracer class for request tracing
+
+Review:
+- [ ] Review each stub against code-quality.mdc principles
+- [ ] Verify Dependency Inversion is applied for all external dependencies
+- [ ] Check that state/dependency separation is maintained
+- [ ] Confirm Result types are used for error handling
+- [ ] Get approval before implementing
+```

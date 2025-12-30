@@ -1,0 +1,84 @@
+---
+alwaysApply: false
+---
+### Step 1: Integration Planning
+
+Before writing any code, understand how the new system integrates with existing infrastructure. This step answers the question: "How does this connect to what already exists?"
+
+**Integration Planning Questions**
+
+```
+- What existing services, databases, caches, or APIs does this system need?
+- What interfaces (REST, gRPC, message queues, events) must it support?
+- What libraries or frameworks are already in use that we can leverage?
+- What existing code patterns or utilities can be reused?
+- Are there authentication/authorization mechanisms already in place?
+- What monitoring or observability infrastructure exists?
+- What deployment infrastructure is available?
+```
+
+**Integration Planning Output**
+
+```
+Integration Plan
+================
+
+Dependencies:
+- Internal Services: [List with versions and interfaces]
+- External Services: [List with API documentation references]
+- Libraries: [List of libraries to use, versions]
+- Databases: [Database type, connection requirements]
+- Caches: [Cache technology, key patterns]
+- Message Queues: [Queue technology, topic/exchange names]
+
+Existing Code to Reuse:
+- [Component 1]: [Location and how to use it]
+- [Component 2]: [Location and how to use it]
+[...]
+
+Interface Requirements:
+- Input Interfaces: [What interfaces accept input]
+- Output Interfaces: [What interfaces produce output]
+- Protocol Details: [Any specific protocol requirements]
+
+Configuration:
+- Environment Variables: [List of required configuration]
+- Secrets Management: [How secrets are accessed]
+- Feature Flags: [Any flags needed for gradual rollout]
+
+Observability Integration:
+- Logging: [Logging framework and format]
+- Metrics: [Metrics to emit and destinations]
+- Tracing: [Tracing framework and correlation IDs]
+```
+
+**TODO List Template for Integration Planning**
+
+```
+TODO: Integration Planning
+==========================
+
+- [ ] Document all external dependencies and interfaces
+- [ ] Identify existing code to reuse
+- [ ] Choose libraries and frameworks
+- [ ] Define configuration requirements
+- [ ] Plan observability integration
+- [ ] Review against code-quality.mdc principles
+- [ ] Present integration plan for approval
+```
+
+**Example TODO List for Integration Planning**
+
+```
+TODO: Document Processing Service Integration Planning
+======================================================
+
+- [ ] Identify all external service dependencies (OCR API, NLP API)
+- [ ] Review existing database schemas for document storage
+- [ ] Check message queue configuration and naming conventions
+- [ ] Audit authentication/authorization patterns in codebase
+- [ ] Select appropriate libraries for file handling
+- [ ] Define environment variable requirements
+- [ ] Plan logging and metrics integration
+- [ ] Review integration plan against code-quality.mdc
+```
