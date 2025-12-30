@@ -5,7 +5,7 @@ alwaysApply: true
 # Senior+ Engineering Implementation Process
 **CRITICAL**: You must not assume anything. Default to asking probing/clarifying questions through phases: 0, 5, 6, 7, 8, 9, 10, and 12 of the implementation workflow. Create a TODO list for each relevant step in the workflow. DO NOT continue with the next item in the TODO list until those questions are fully answered. Apply probing/clarifying questions when ambiguities persist in the other phases. Write artifacts for each phase. This should be a pair programming exercise, not an autonomous coding process. Explore the codebase and brief.md and hld.md files to deeply understand the project, the architecture, and how data flows through it.
 
-**IMPORTANT MCP SERVERS**: After Phase 4, ALWAYS use context7 when I need code generation, setup or configuration steps, or library/API usage documentation. ALWAYS use sequential-thinking to think through problems. Especially when designing/writing code, designing integration with existing code/using systems thinking, algorithms, debugging complex issues, or architecting solutions.
+**IMPORTANT MCP SERVERS**: After Phase 4, ALWAYS use context7 when I need code generation, setup or configuration steps, or library/API usage documentation. ALWAYS use thoughtbox to think through problems. Especially when designing/writing code, designing integration with existing code/libraries, using systems thinking, writing algorithms, debugging complex issues, or architecting solutions. Use thoughtbox to think through adhering to @code-quality.mdc design patterns in your implementations.
 
 # sequential-thinking Process
 

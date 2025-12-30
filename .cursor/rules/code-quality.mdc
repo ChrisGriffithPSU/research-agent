@@ -12,29 +12,233 @@ This rule defines the principles and practices for writing senior+ engineer qual
 
 Senior code is maintainable, debuggable, and resistant to bugs. Code is read more than written - optimize for comprehension. Precision over cleverness - explicit is better than implicit. The cost of change must be considered at every decision point. Write code as if the person maintaining it is a violent psychopath who knows where you live.
 
+## Architectural Patterns
+
+Production-grade systems benefit from clear architectural boundaries that separate concerns and enable testability, maintainability, and scalability.
+
+### Layered Hexagonal Architecture
+
+The hexagonal architecture (also known as ports and adapters) organizes code into concentric layers with dependencies flowing inward:
+
+```
+Presentation Layer (API Routers, Schemas, Dependencies)
+        │
+        ▼
+Application Layer (Services, Business Logic)
+        │
+        ▼
+Domain Layer (Interfaces, Domain Models, Business Rules)
+        │
+        ▼
+Infrastructure Layer (Database, External APIs, File System)
+```
+
+**Key Principles:**
+
+1. **Dependency Flow Inward**: Inner layers never depend on outer layers. All dependencies point toward the domain core.
+
+2. **Ports Define Boundaries**: Interfaces in domain/infrastructure layers define contracts that outer implementations satisfy.
+
+3. **Adapters Translate**: External systems connect through adapters that implement defined interfaces.
+
+**Example Structure:**
+```
+src/
+├── presentation/    # API endpoints, request/response schemas
+├── application/     # Use cases, services, workflow orchestration
+├── domain/          # Business entities, interfaces, value objects
+└── infrastructure/  # Database, caches, external services
+```
+
+Dependencies flow inward - the domain layer should have no dependencies on outer layers. Use package or namespace structure to enforce architectural boundaries and prevent inappropriate dependencies.
+
+### Feature-Based Organization
+
+Organize code by feature or domain capability rather than by technical type. This keeps related concepts together and makes the codebase navigable.
+
+**Pattern:**
+```
+src/
+├── features/
+│   ├── auth/
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   ├── service.py
+│   │   └── __init__.py
+│   ├── payments/
+│   │   ├── routes.py
+│   │   ├── schemas.py
+│   │   ├── service.py
+│   │   └── __init__.py
+│   └── ...
+└── shared/          # Common utilities, base classes, configs
+```
+
+Related concepts should be co-located, preferring cohesion over separation by type. This feature-based structure makes it easier to understand and modify a specific capability.
+
 ## SOLID Principles
 
-The SOLID principles provide a foundation for writing maintainable, flexible code. Each principle addresses specific aspects of object-oriented design and together they help create systems that are easier to understand, extend, and maintain.
+The SOLID principles provide a foundation for writing maintainable, flexible code. Each principle addresses specific aspects of object-oriented design.
 
 ### Single Responsibility Principle
 
-Each component does one thing well. Signs of violation include having multiple reasons for a component to change. Small, focused units are easier to test, debug, and reason about. When a class or function has multiple responsibilities, it becomes harder to understand, harder to test, and more likely to change when requirements evolve. Look for classes that could be split into smaller, more focused units. Functions should do one thing and do it completely.
+Each component does one thing well. Signs of violation include having multiple reasons for a component to change.
+
+**Example - Violation:**
+```python
+class UserService:
+    def authenticate(self, username, password): ...
+    def send_email(self, subject, body): ...  # Different responsibility
+    def log_audit_event(self, event): ...     # Different responsibility
+```
+
+**Example - Following Principle:**
+```python
+class AuthenticationService:
+    def authenticate(self, username, password): ...
+
+class EmailService:
+    def send_email(self, subject, body, recipient): ...
+
+class AuditService:
+    def log_event(self, event_type, user_id, details): ...
+```
+
+Small, focused units are easier to test, debug, and reason about. When a class or function has multiple responsibilities, it becomes harder to understand, harder to test, and more likely to change when requirements evolve.
 
 ### Open/Closed Principle
 
-Software entities should be open for extension but closed for modification. Use composition over inheritance where appropriate. Strategy pattern, template method pattern, and hooks provide mechanisms for customization without modifying existing code. This principle suggests designing systems where new functionality can be added by extending existing code rather than changing it. Composition allows behavior to be selected at runtime, while inheritance creates static relationships that are harder to change.
+Software entities should be open for extension but closed for modification.
+
+**Example - Strategy Pattern for Extensibility:**
+```python
+from abc import ABC, abstractmethod
+
+class PaymentProcessor(ABC):
+    @abstractmethod
+    def process(self, amount: float) -> dict: ...
+
+class StripeProcessor(PaymentProcessor):
+    def process(self, amount: float) -> dict:
+        return {"status": "success", "provider": "stripe"}
+
+class PayPalProcessor(PaymentProcessor):
+    def process(self, amount: float) -> dict:
+        return {"status": "success", "provider": "paypal"}
+
+# Adding new payment methods does not require modifying existing code
+class SquareProcessor(PaymentProcessor):
+    def process(self, amount: float) -> dict:
+        return {"status": "success", "provider": "square"}
+```
+
+Use composition over inheritance where appropriate. Strategy pattern, template method pattern, and hooks provide mechanisms for customization without modifying existing code.
 
 ### Liskov Substitution Principle
 
-Subtypes must be substitutable for their base types without altering the correctness of the program. Contract violations are subtle bugs that manifest in unexpected ways. Preconditions cannot be strengthened in subtypes - a subclass should not require more than its parent class. Postconditions cannot be weakened in subtypes - a subclass should not promise less than its parent class. This principle ensures that polymorphism works correctly and that derived classes honor the contracts of their base classes.
+Subtypes must be substitutable for their base types without altering correctness.
+
+**Example - Violation:**
+```python
+class Bird(ABC):
+    @abstractmethod
+    def fly(self) -> None: ...
+
+class Ostrich(Bird):  # LSP Violation!
+    def fly(self) -> None:
+        raise Exception("Ostrich cannot fly")
+```
+
+**Example - Correct Approach:**
+```python
+class Bird(ABC):
+    @abstractmethod
+    def move(self) -> None: ...
+
+class FlyingBird(Bird):
+    @abstractmethod
+    def fly(self) -> None: ...
+
+class Sparrow(FlyingBird):
+    def fly(self) -> None: ...
+
+class Ostrich(Bird):
+    def move(self) -> None:
+        print("Ostrich runs")
+```
+
+Preconditions cannot be strengthened in subtypes. Postconditions cannot be weakened in subtypes.
 
 ### Interface Segregation Principle
 
-Many specific interfaces are better than one general interface. Clients should not depend on methods they do not use. Fat interfaces lead to pollution and unnecessary dependencies. Instead of having one large interface that forces clients to depend on methods they do not need, create multiple smaller interfaces that are specific to particular client needs. This reduces coupling and makes it easier to implement and test components.
+Many specific interfaces are better than one general interface.
+
+**Example:**
+```python
+# Fat interface - forces clients to depend on unused methods
+class Worker(ABC):
+    @abstractmethod
+    def work(self): ...
+    @abstractmethod
+    def eat(self): ...
+    @abstractmethod
+    def sleep(self): ...
+
+# Segregated interfaces
+class Workable(ABC):
+    @abstractmethod
+    def work(self): ...
+
+class Eatable(ABC):
+    @abstractmethod
+    def eat(self): ...
+
+class Sleepable(ABC):
+    @abstractmethod
+    def sleep(self): ...
+
+class Robot(Workable):
+    def work(self): ...
+
+class Human(Workable, Eatable, Sleepable):
+    def work(self): ...
+    def eat(self): ...
+    def sleep(self): ...
+```
+
+Clients should not depend on methods they do not use. Fat interfaces lead to pollution and unnecessary dependencies.
 
 ### Dependency Inversion Principle
 
-Depend on abstractions, not concretions. This is the highest priority principle in this codebase. High-level modules must not depend on low-level modules. Both must depend on abstractions. Implementation uses dependency injection, interface injection, or service locators. Every external dependency must be abstracted behind an interface. This principle inverts the traditional dependency structure, ensuring that business logic does not depend on implementation details.
+Depend on abstractions, not concretions. High-level modules must not depend on low-level modules. Both must depend on abstractions.
+
+**Example:**
+```python
+# Bad - high-level depends on low-level
+class MySQLDatabase:
+    def query(self, sql: str): ...
+
+class UserService:
+    def __init__(self):
+        self.db = MySQLDatabase()
+
+# Good - both depend on abstraction
+class Database(ABC):
+    @abstractmethod
+    def query(self, sql: str): ...
+
+class MySQLDatabase(Database):
+    def query(self, sql: str): ...
+
+class PostgreSQLDatabase(Database):
+    def query(self, sql: str): ...
+
+class UserService:
+    def __init__(self, db: Database):
+        self.db = db
+```
+
+This is the highest priority principle in this codebase. Every external dependency must be abstracted behind an interface. Implementation uses dependency injection, interface injection, or service locators.
 
 ## Dependency Inversion Deep Dive
 
@@ -149,3 +353,463 @@ Profile before optimizing - measure to identify actual bottlenecks rather than g
 ## Summary
 
 Writing senior+ engineer quality code requires attention to multiple dimensions: architecture through SOLID principles, correctness through functional patterns and defensive programming, robustness through proper error handling, and debuggability through observability. The goal is code that is maintainable, meaning future developers can understand and modify it easily; debuggable, meaning problems can be diagnosed quickly; and bug-free, meaning the code correctly implements its intended behavior under all conditions. Every decision should be evaluated against these goals, and when trade-offs are necessary, they should be made explicitly and documented.
+
+## State Management: Separating Mutable State from Immutable Dependencies
+
+One of the most critical patterns for building complex systems is separating mutable state from immutable dependencies. This principle applies universally: backend request processing, frontend state management, workflow engines, and agent systems all benefit from this clear separation.
+
+### The Core Principle
+
+When designing any system that processes requests or executes workflows, distinguish between two categories of data. The first category is mutable state that changes during processing - this includes request inputs, accumulated results, step counters, and intermediate outputs. The second category is immutable dependencies that remain constant - this includes configuration, clients for external services, validators, and any other resources needed for processing.
+
+By keeping these categories separate, you achieve several benefits. The system becomes easier to test because dependencies can be easily mocked or replaced without creating complex state scenarios. Debugging becomes more straightforward because it is clear what can change and what remains fixed. Type safety is improved because the compiler or type checker can enforce constraints on both categories separately. Parallelization becomes safer because immutable dependencies can be shared across concurrent operations without synchronization concerns.
+
+### General Pattern
+
+```python
+from typing import TypedDict, Generic, TypeVar, Any
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+
+State = TypeVar("State")
+
+# Mutable state - changes during processing
+class WorkflowState(TypedDict):
+    request_id: str
+    current_step: str
+    input_data: dict[str, Any]
+    accumulated_results: list[dict]
+    errors: list[str]
+
+# Immutable context - constant during execution
+class ProcessingContext(ABC, Generic[State]):
+    @property
+    @abstractmethod
+    def config(self) -> dict[str, Any]: ...
+
+    @property
+    @abstractmethod
+    def services(self) -> dict[str, Any]: ...
+
+@dataclass
+class OrderContext(ProcessingContext[WorkflowState]):
+    config: dict[str, Any]
+    database: Any
+    payment: Any
+    inventory: Any
+
+class OrderWorkflow:
+    def __init__(self, context: OrderContext):
+        self.context = context
+
+    def process_order(self, order_data: dict) -> WorkflowState:
+        state: WorkflowState = {
+            "request_id": order_data.get("id", ""),
+            "current_step": "validate",
+            "input_data": order_data,
+            "accumulated_results": [],
+            "errors": [],
+        }
+        
+        for step in ["validate", "check_inventory", "process_payment", "confirm"]:
+            state = self._execute_step(step, state)
+            if state["errors"] and self._is_fatal_error(state["errors"][-1]):
+                break
+        
+        return state
+
+    def _execute_step(self, step: str, state: WorkflowState) -> WorkflowState: ...
+    def _validate_order(self, state: WorkflowState) -> dict: ...
+    def _check_inventory(self, state: WorkflowState) -> dict: ...
+    def _process_payment(self, state: WorkflowState) -> dict: ...
+    def _confirm_order(self, state: WorkflowState) -> dict: ...
+    def _is_fatal_error(self, error: str) -> bool: ...
+```
+
+### Frontend Pattern
+
+```typescript
+// Mutable state - component-specific
+interface CheckoutState {
+  step: 'cart' | 'shipping' | 'payment' | 'confirmation';
+  cartItems: CartItem[];
+  errors: string[];
+  isLoading: boolean;
+}
+
+// Immutable context - global dependencies
+interface AppContext {
+  config: { apiBaseUrl: string; };
+  authService: AuthService;
+  paymentService: PaymentService;
+}
+
+function CheckoutPage() {
+  const [state, setState] = useState<CheckoutState>({...});
+  const { config, services } = useAppContext();
+  // State changes during interaction, context remains constant
+}
+```
+
+### When to Apply This Pattern
+
+Apply the state/dependency separation pattern when building any system that processes requests, executes workflows, or manages complex user interactions. This includes API request handlers that need database and cache access, workflow engines that coordinate multiple steps, user interfaces that manage state while calling backend services, batch processing jobs, and background tasks that process data with external service dependencies.
+
+The pattern is essential for testability because dependencies can be mocked without complex state setup. It enables clearer debugging by making it obvious what can change versus what remains fixed. It supports parallelization by ensuring immutable dependencies can be safely shared.
+
+## Workflow Patterns: State Machines for Complex Processes
+
+Complex workflows benefit from being modeled as state machines with deterministic transitions. This pattern ensures that processes follow predictable paths and handle all possible states correctly.
+
+### The Core Principle
+
+A state machine consists of states representing conditions or stages, transitions defining valid paths between states, events triggering transitions, and actions executed during transitions. By defining these elements explicitly, you create systems that are easier to reason about, test, and debug.
+
+### General Pattern
+
+```python
+from typing import TypedDict, Literal, Dict, Any, Callable
+from dataclasses import dataclass
+from enum import Enum
+
+class WorkflowState(Enum):
+    INITIAL = "initial"
+    VALIDATING = "validating"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class StateDict(TypedDict):
+    current: str
+    step_data: Dict[str, Any]
+    history: list[Dict[str, Any]]
+
+@dataclass
+class Transition:
+    from_state: WorkflowState
+    to_state: WorkflowState
+    condition: Callable[[StateDict], bool]
+    action: Callable[[StateDict, Any], StateDict]
+
+class StateMachine(ABC):
+    def __init__(self):
+        self._transitions: Dict[tuple, Transition] = {}
+        self._entry_actions: Dict[WorkflowState, Callable] = {}
+
+    def add_transition(self, from_state: WorkflowState, to_state: WorkflowState,
+                       condition: Callable[[StateDict], bool] = None,
+                       action: Callable[[StateDict, Any], StateDict] = None): ...
+
+    def on_enter(self, state: WorkflowState, action: Callable): ...
+
+    def execute(self, initial_data: Dict[str, Any], event: Any = None) -> StateDict: ...
+
+class DocumentApprovalWorkflow(StateMachine):
+    def __init__(self):
+        super().__init__()
+        self._setup_workflow()
+
+    def _setup_workflow(self):
+        self.on_enter(WorkflowState.VALIDATING, self._validate_document)
+        self.on_enter(WorkflowState.PROCESSING, self._process_document)
+        
+        self.add_transition(WorkflowState.INITIAL, WorkflowState.VALIDATING)
+        self.add_transition(WorkflowState.VALIDATING, WorkflowState.PROCESSING,
+                          condition=lambda s: s.get("validation_passed", False))
+        self.add_transition(WorkflowState.PROCESSING, WorkflowState.COMPLETED,
+                          condition=lambda s: s.get("processing_complete", False))
+
+    def _validate_document(self, state: StateDict): ...
+    def _process_document(self, state: StateDict): ...
+
+def run_document_workflow(document: dict) -> dict:
+    workflow = DocumentApprovalWorkflow()
+    result = workflow.execute({"document": document})
+    return {"success": result["current"] == WorkflowState.COMPLETED.value}
+```
+
+### When to Apply This Pattern
+
+Apply state machine patterns when building workflows with multiple steps, conditions for transitions between steps, clear beginning and end states, the need for audit trails showing state progression, or the requirement to handle failure states gracefully. Common applications include order fulfillment pipelines, content publication workflows, user registration and onboarding processes, CI/CD deployment pipelines, and any multi-step form wizard.
+
+The state machine pattern makes workflows explicit and self-documenting through defined states and transitions. It simplifies testing by allowing individual transitions to be tested in isolation. It improves debugging by making it easy to track how the system reached any given state. It prevents invalid states by only allowing defined transitions.
+
+## Graceful Degradation: Building Resilient Systems
+
+External dependencies will fail. Networks will timeout. Services will be unavailable. Resilient systems anticipate these failures and provide fallback behavior rather than crashing or returning errors to users.
+
+### The Core Principle
+
+Graceful degradation means that when any component of the system fails, the overall system continues to function, possibly at a reduced capability level. This is achieved through fallback behaviors, default values, retry logic, circuit breakers, and clear error communication that distinguishes between different failure types.
+
+### General Pattern
+
+```python
+from typing import TypeVar, Generic, Optional, Callable, Any
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+
+T = TypeVar("T")
+
+@dataclass
+class Result(Generic[T]):
+    success: bool
+    value: Optional[T] = None
+    error: Optional[str] = None
+
+    @classmethod
+    def ok(cls, value: T) -> "Result[T]": ...
+    @classmethod
+    def fail(cls, error: str) -> "Result[T]": ...
+
+class FallbackStrategy(ABC, Generic[T]):
+    @abstractmethod
+    async def primary(self) -> T: ...
+    @abstractmethod
+    async def fallback(self, error: Exception) -> T: ...
+
+class CachedFallbackStrategy(FallbackStrategy[T]):
+    def __init__(self, primary_fn: Callable[[], T], cache_key: str): ...
+
+    async def primary(self) -> T: ...
+    async def fallback(self, error: Exception) -> T: ...
+
+class RetryWithBackoff(FallbackStrategy[T]):
+    def __init__(self, operation: Callable[[], T], max_retries: int = 3,
+                 base_delay: float = 1.0): ...
+
+    async def primary(self) -> T: ...
+    async def fallback(self, error: Exception) -> T: ...
+
+class ServiceWithFallback(Generic[T]):
+    def __init__(self, primary_service: Callable[[], T],
+                 fallback_service: Callable[[Exception], T]): ...
+
+    def execute(self) -> Result[T]: ...
+    async def execute_async(self) -> Result[T]: ...
+
+# Usage: wrap external services with fallback logic
+class LLMService:
+    def __init__(self, cloud_llm: Callable[[], Any], local_llm: Callable[[], Any]):
+        self.service = ServiceWithFallback(
+            primary_service=self._try_cloud,
+            fallback_service=self._try_local,
+        )
+
+    async def generate(self, prompt: str) -> str:
+        result = await self.service.execute_async()
+        return result.value if result.success else "fallback response"
+
+class DataFetcher:
+    async def fetch(self, key: str, use_cache: bool = True) -> Any:
+        try:
+            data = await self._api_fetch(key)
+            if use_cache:
+                self._cache_set(key, data)
+            return data
+        except (ConnectionError, TimeoutError):
+            if use_cache:
+                cached = self._cache_get(key)
+                if cached is not None:
+                    return cached
+            return self._offline_fallback()
+```
+
+### When to Apply This Pattern
+
+Apply graceful degradation patterns when building any system that depends on external resources, services that may experience temporary unavailability, user-facing systems where errors impact user experience, or systems requiring high availability. This includes API clients that call external services, frontend applications that need offline support, batch jobs that process data from unreliable sources, and any system where partial functionality is better than total failure.
+
+Graceful degradation improves user experience by maintaining functionality during outages. It enables testing by providing deterministic fallback values. It supports debugging by clearly indicating when fallbacks are used. It increases system resilience by preventing cascading failures.
+
+## Observability: Making Systems Debuggable
+
+Observability is not an afterthought - it is a fundamental system property that must be designed from the beginning. A system that cannot be observed cannot be debugged, monitored, or understood in production.
+
+### The Core Principle
+
+Observability means understanding system behavior through external outputs. This includes structured logging at decision points and boundaries, distributed tracing for request flows, metrics for performance and health monitoring, and correlation IDs that connect related operations. Every component should emit observable data that helps understand its behavior.
+
+### General Pattern
+
+```python
+import logging
+import time
+from typing import Dict, Any, Optional
+from dataclasses import dataclass
+from contextlib import contextmanager
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
+
+class StructuredLogger:
+    def __init__(self, name: str, correlation_id: str = None):
+        self.name = name
+        self.correlation_id = correlation_id
+
+    def _log(self, level: str, message: str, event: str, extra: Dict = None):
+        record = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": level,
+            "event": event,
+            "correlation_id": self.correlation_id,
+        }
+        if extra:
+            record.update(extra)
+        logger.info(record)
+
+    def info(self, message: str, event: str, **extra): ...
+    def error(self, message: str, event: str, **extra): ...
+
+@dataclass
+class Span:
+    name: str
+    correlation_id: str
+    start_time: float
+    end_time: float = None
+    input_data: Dict = None
+    error: str = None
+
+class Tracer:
+    def __init__(self, enabled: bool = True):
+        self.enabled = enabled
+
+    @contextmanager
+    def span(self, name: str, correlation_id: str = None, input_data: Dict = None):
+        span = Span(name=name, correlation_id=correlation_id or "unknown",
+                   start_time=time.time(), input_data=input_data)
+        try:
+            yield span
+            span.end_time = time.time()
+        except Exception as e:
+            span.error = str(e)
+            span.end_time = time.time()
+            raise
+
+class Metrics:
+    def increment(self, metric: str, value: int = 1): ...
+    def timing(self, metric: str, value_ms: float): ...
+    def gauge(self, metric: str, value: float): ...
+
+class ObservableService:
+    def __init__(self, tracer: Tracer, metrics: Metrics, database: Any, cache: Any):
+        self.tracer = tracer
+        self.metrics = metrics
+        self.database = database
+        self.cache = cache
+        self.logger = StructuredLogger(__name__)
+
+    def process_request(self, request_id: str, user_id: str, data: Dict) -> Dict:
+        with self.tracer.span("process_request", correlation_id=request_id,
+                             input_data={"user_id": user_id}):
+            try:
+                result = self._process(data)
+                self.metrics.increment("requests.success")
+                return {"success": True, "data": result}
+            except Exception as e:
+                self.metrics.increment("requests.error")
+                self.logger.error(f"Request failed: {e}", event="request_failed")
+                return {"success": False, "error": str(e)}
+
+    def _validate(self, data: Dict) -> Dict: ...
+    def _process(self, data: Dict) -> Dict: ...
+
+# Frontend observability
+class FrontendTracer:
+    def start_span(self, name: str, metadata: Dict = None): ...
+    def end_span(self, span: Dict): ...
+    def track_component_render(self, component_name: str): ...
+    def track_api_call(self, endpoint: str, correlation_id: str): ...
+```
+
+### What to Observe
+
+Every system should emit observability data for several key areas. For operations, track the start and end of significant operations with duration, the inputs and outputs of each operation, and any errors that occur with context. For performance, measure latency at each step and overall, track throughput and request rates, monitor error rates by type, and track resource utilization. For business metrics, count significant business events, track user actions and their outcomes, measure business KPIs, and monitor SLAs and error budgets.
+
+### When to Apply This Pattern
+
+Apply observability patterns from the beginning of any non-trivial system. This includes production systems that need monitoring, distributed systems where requests span multiple services, any system where debugging in production is necessary, and systems requiring performance optimization.
+
+Observability enables debugging in production by providing visibility into system behavior. It supports performance optimization by identifying bottlenecks. It improves reliability by enabling proactive alerting. It aids in understanding system behavior under load.
+
+## Factory Pattern: Centralizing Complex Initialization
+
+Complex object initialization should be centralized in factory functions rather than scattered throughout the codebase. This ensures consistent initialization, proper dependency injection, and easier testing.
+
+### The Core Principle
+
+Factories encapsulate the logic of creating objects, handling configuration, dependency injection, and any setup required. This includes managing connection pools, configuring clients, handling environment-specific setup, and caching instances when appropriate.
+
+### General Pattern
+
+```python
+from typing import TypeVar, Generic, Type, Callable, Dict, Any, Optional
+from functools import lru_cache
+from dataclasses import dataclass
+from abc import ABC, abstractmethod
+
+T = TypeVar("T")
+
+@dataclass
+class Configuration:
+    environment: str = "development"
+    debug: bool = False
+    timeout_seconds: int = 30
+
+class Factory(Generic[T], ABC):
+    @abstractmethod
+    def create(self, config: Configuration) -> T: ...
+
+@dataclass
+class DatabaseConfig(Configuration):
+    host: str = "localhost"
+    port: int = 5432
+    database: str = "app_db"
+    pool_size: int = 5
+
+@dataclass
+class CacheConfig(Configuration):
+    host: str = "localhost"
+    port: int = 6379
+    ttl_seconds: int = 3600
+
+class DependencyFactory:
+    def __init__(self, settings: Dict[str, Any]):
+        self.settings = settings
+
+    def create_database_config(self) -> DatabaseConfig: ...
+    def create_cache_config(self) -> CacheConfig: ...
+    def create_database(self, config: DatabaseConfig = None) -> Any: ...
+    def create_cache(self, config: CacheConfig = None) -> Any: ...
+    def create_dependencies(self) -> Any: ...
+
+@lru_cache(maxsize=1)
+def make_database_client(settings: Dict[str, Any]) -> Any:
+    """Cached factory for singleton-like behavior."""
+    factory = DependencyFactory(settings)
+    return factory.create_database()
+
+# Frontend example
+class ComponentFactory:
+    def __init__(self, theme: Dict, i18n: Any, router: Any):
+        self.theme = theme
+        self.i18n = i18n
+        self.router = router
+
+    def create_button(self, label: str, on_click: Callable, variant: str = "primary"): ...
+    def create_card(self, title: str, content: Any, actions: list = None): ...
+    def create_data_table(self, columns: list, data: list, on_row_click: Callable = None): ...
+```
+
+### When to Apply This Pattern
+
+Apply factory patterns when object creation involves complex logic, multiple dependencies need to be assembled, configuration must be applied consistently, object creation should be cached or made singleton-like, or testing requires mockable factory methods.
+
+The factory pattern centralizes initialization logic making it easier to modify and maintain. It ensures consistent initialization across the application. It simplifies testing by enabling mock factories. It supports configuration-driven creation for different environments.
+
+## Summary of Enhanced Principles
+
+The patterns and principles in this document, extracted from analysis of production systems and generalized for universal application, form the foundation of senior+ engineer quality code. These principles apply equally to backend services, frontend applications, data pipelines, AI agents, and any other software system.
+
+The key principles to remember are as follows. First, separate mutable state from immutable dependencies - this makes systems easier to test, debug, and parallelize. Second, model complex workflows as state machines - this ensures predictable behavior and clear transition paths. Third, implement graceful degradation for all external dependencies - this creates resilient systems that continue functioning during partial failures. Fourth, design observability from the beginning - this enables debugging and monitoring in production. Fifth, centralize complex initialization in factories - this ensures consistent creation and easier testing.
+
+These principles are not specific to any domain or technology. They are fundamental patterns for building maintainable, debuggable, and resilient software systems. Master these patterns and apply them consistently across all your work.
