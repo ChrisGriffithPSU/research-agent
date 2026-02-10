@@ -1,5 +1,5 @@
 # Dockerfile for Worker Services
-# Used by: Fetchers, Deduplication, Extraction, Synthesis, Learning
+# Used by: ArXiv Fetcher, Paper Triage, PDF Parser, Concept Generator, Experiment Exploder, Notifier
 
 FROM python:3.13-slim
 
@@ -24,9 +24,8 @@ RUN uv pip install --system -r <(uv pip compile pyproject.toml)
 COPY src/ ./src/
 COPY config/ ./config/
 
-# Build argument for service path
-ARG SERVICE_PATH
-ENV SERVICE_PATH=${SERVICE_PATH}
+# Create artifacts directory
+RUN mkdir -p /app/artifacts
 
-# Run worker (message queue consumer)
-CMD python -m ${SERVICE_PATH/\//.}.main
+# Default command (override per service)
+CMD ["python", "-m", "src.main", "--help"]

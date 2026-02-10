@@ -1,4 +1,8 @@
 """Database health check router for FastAPI services."""
+
+import logging
+from datetime import datetime
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
@@ -109,4 +113,3 @@ async def readiness_check() -> JSONResponse:
             },
             status_code=503,
         )
-

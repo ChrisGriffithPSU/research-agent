@@ -1,10 +1,11 @@
 """Message consumer for RabbitMQ."""
+
 import asyncio
 import functools
 import json
 import logging
 import time
-from typing import Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 import aio_pika
 
@@ -40,7 +41,7 @@ class MessageConsumer:
     """
 
     # Message type mapping for deserialization
-    _MESSAGE_TYPES: Dict[QueueName, type] = {}
+    _MESSAGE_TYPES: Dict[str, type] = {}
 
     def __init__(
         self,
@@ -58,13 +59,14 @@ class MessageConsumer:
         self._connection = connection
         self._retry_strategy = retry_strategy
         self._prefetch_count = prefetch_count
-        self._handlers: Dict[QueueName, Callable] = {}
+        self._handlers: Dict[str, Callable] = {}
         self._metrics = get_metrics()
         self._consuming = False
         self._shutdown_requested = False
+        self._consumer_bindings: list[tuple[aio_pika.abc.AbstractQueue, str]] = []
         self._message_type_mapping = self._build_message_type_mapping()
 
-    def _build_message_type_mapping(self) -> Dict[QueueName, type]:
+    def _build_message_type_mapping(self) -> Dict[str, type]:
         """Build mapping from queue to message type.
 
         Returns:
@@ -80,18 +82,19 @@ class MessageConsumer:
         )
 
         return {
-            QueueName.CONTENT_DISCOVERED: SourceMessage,
-            QueueName.CONTENT_DEDUPLICATED: DeduplicatedContentMessage,
-            QueueName.INSIGHTS_EXTRACTED: ExtractedInsightsMessage,
-            QueueName.DIGEST_READY: DigestReadyMessage,
-            QueueName.FEEDBACK_SUBMITTED: FeedbackMessage,
-            QueueName.TRAINING_TRIGGER: TrainingTriggerMessage,
+            QueueName.CONTENT_DISCOVERED.value: SourceMessage,
+            QueueName.CONTENT_DEDUPLICATED.value: DeduplicatedContentMessage,
+            QueueName.INSIGHTS_EXTRACTED.value: ExtractedInsightsMessage,
+            QueueName.DIGEST_READY.value: DigestReadyMessage,
+            QueueName.FEEDBACK_SUBMITTED.value: FeedbackMessage,
+            QueueName.TRAINING_TRIGGER.value: TrainingTriggerMessage,
         }
 
     def subscribe(
         self,
-        queue_name: QueueName,
-        handler: Callable[[BaseMessage], None],
+        queue_name: QueueName | str,
+        handler: Callable[[BaseMessage], Any],
+        message_type: type[BaseMessage] | None = None,
     ) -> None:
         """Register handler for a queue.
 
@@ -107,12 +110,17 @@ class MessageConsumer:
         if not asyncio.iscoroutinefunction(handler):
             raise ValueError("Handler must be an async function")
 
-        # Check message type exists for queue
-        if queue_name not in self._message_type_mapping:
-            raise ValueError(f"No message type defined for queue {queue_name.value}")
+        queue_value = queue_name.value if isinstance(queue_name, QueueName) else str(queue_name)
 
-        self._handlers[queue_name] = handler
-        logger.info(f"Registered handler for queue: {queue_name.value}")
+        # Support custom queue contracts used by worker-specific message schemas.
+        if message_type is not None:
+            self._message_type_mapping[queue_value] = message_type
+
+        if queue_value not in self._message_type_mapping:
+            raise ValueError(f"No message type defined for queue {queue_value}")
+
+        self._handlers[queue_value] = handler
+        logger.info(f"Registered handler for queue: {queue_value}")
 
     async def start(self) -> None:
         """Start consuming messages from subscribed queues.
@@ -129,6 +137,7 @@ class MessageConsumer:
 
         if not self._connection.is_connected:
             from src.shared.messaging.exceptions import ConnectionError
+
             raise ConnectionError("Not connected to RabbitMQ")
 
         self._consuming = True
@@ -138,16 +147,17 @@ class MessageConsumer:
         channel = self._connection.channel
         await channel.set_qos(prefetch_count=self._prefetch_count)
 
+        self._consumer_bindings.clear()
+
         # Setup consumer for each queue
         for queue_name in self._handlers.keys():
-            await channel.basic_consume(
-                queue=queue_name.value,
-                consumer_callback=self._create_callback(queue_name),
-            )
+            queue = await channel.declare_queue(name=queue_name, passive=True)
+            tag = await queue.consume(self._create_callback(queue_name), no_ack=False)
+            self._consumer_bindings.append((queue, tag))
 
         logger.info(
             f"Started consuming from {len(self._handlers)} queue(s): "
-            f"{', '.join([q.value for q in self._handlers.keys()])}"
+            f"{', '.join([q for q in self._handlers.keys()])}"
         )
 
         # Wait for shutdown
@@ -177,8 +187,9 @@ class MessageConsumer:
 
         # Cancel all consumers
         try:
-            channel = self._connection.channel
-            await channel.cancel()
+            for queue, tag in self._consumer_bindings:
+                await queue.cancel(tag)
+            self._consumer_bindings.clear()
             logger.info("Consumers cancelled")
         except Exception as e:
             logger.error(f"Error cancelling consumers: {e}")
@@ -188,7 +199,7 @@ class MessageConsumer:
 
     def _create_callback(
         self,
-        queue_name: QueueName,
+        queue_name: str,
     ) -> Callable:
         """Create callback wrapper for queue.
 
@@ -208,7 +219,6 @@ class MessageConsumer:
 
         async def callback(
             message: aio_pika.IncomingMessage,
-            channel: aio_pika.RobustChannel,
         ):
             # Start timer
             start_time = time.time()
@@ -226,71 +236,57 @@ class MessageConsumer:
 
                 # Success - ack message
                 await message.ack()
-                self._metrics.record_message_acked(queue_name.value)
+                self._metrics.record_message_acked(queue_name)
 
                 latency_ms = (time.time() - start_time) * 1000
                 self._metrics.record_time(
-                    f"consumed.{queue_name.value}",
+                    f"consumed.{queue_name}",
                     latency_ms,
                 )
 
             except json.JSONDecodeError as e:
                 # Invalid JSON - permanent error, send to DLQ
-                await self._handle_permanent_error(
-                    message, queue_name, "invalid_json", e
-                )
+                await self._handle_permanent_error(message, queue_name, "invalid_json", e)
 
             except ValueError as e:
                 # Pydantic validation error - permanent, send to DLQ
-                await self._handle_permanent_error(
-                    message, queue_name, "validation_error", e
-                )
+                await self._handle_permanent_error(message, queue_name, "validation_error", e)
 
             except PermanentError as e:
                 # Explicit permanent error - send to DLQ
-                await self._handle_permanent_error(
-                    message, queue_name, "permanent_error", e
-                )
+                await self._handle_permanent_error(message, queue_name, "permanent_error", e)
 
             except TemporaryError as e:
                 # Transient error - nack with requeue
-                logger.warning(
-                    f"Temporary error processing message from {queue_name.value}: {e}"
-                )
+                logger.warning(f"Temporary error processing message from {queue_name}: {e}")
                 await message.nack(requeue=True)
-                self._metrics.record_message_nacked(queue_name.value, requeued=True)
+                self._metrics.record_message_nacked(queue_name, requeued=True)
 
             except aio_pika.exceptions.ChannelClosed as e:
                 # Channel closed by broker - classify by reply code
-                await self._handle_channel_closed(
-                    message, queue_name, e
-                )
+                await self._handle_channel_closed(message, queue_name, e)
 
             except aio_pika.exceptions.ConnectionClosed as e:
                 # Connection closed by broker
-                logger.error(
-                    f"Connection closed while processing message from {queue_name.value}: {e}"
-                )
+                logger.error(f"Connection closed while processing message from {queue_name}: {e}")
                 # Don't requeue - connection is down
                 await message.nack(requeue=False)
-                self._metrics.record_message_nacked(queue_name.value, requeued=False)
-                self._metrics.record_dlq_message(queue_name.value, "connection_closed")
+                self._metrics.record_message_nacked(queue_name, requeued=False)
+                self._metrics.record_dlq_message(queue_name, "connection_closed")
 
             except Exception as e:
                 # Unknown error - treat as transient, requeue
-                logger.warning(
-                    f"Unknown error processing message from {queue_name.value}: {e}"
-                )
+                logger.warning(f"Unknown error processing message from {queue_name}: {e}")
                 await message.nack(requeue=True)
-                self._metrics.record_message_nacked(queue_name.value, requeued=True)
+                self._metrics.record_message_nacked(queue_name, requeued=True)
 
         return callback
 
     async def _call_handler_with_metrics(
         self,
-        handler: Callable[[BaseMessage], None],
+        handler: Callable[[BaseMessage], Any],
         message: BaseMessage,
-        queue_name: QueueName,
+        queue_name: str,
         start_time: float,
     ) -> None:
         """Call handler with metrics collection.
@@ -302,13 +298,13 @@ class MessageConsumer:
             start_time: Start timestamp
         """
         correlation_id = message.correlation_id
-        logger.info(
-            f"Processing message {correlation_id} from {queue_name.value}"
-        )
+        logger.info(f"Processing message {correlation_id} from {queue_name}")
 
         try:
-            await handler(message)
-            self._metrics.record_message_consumed(queue_name.value)
+            result = handler(message)
+            if asyncio.iscoroutine(result):
+                await result
+            self._metrics.record_message_consumed(queue_name)
 
         except Exception as e:
             # Handler exception - will be caught by callback
@@ -317,7 +313,7 @@ class MessageConsumer:
     async def _handle_permanent_error(
         self,
         message: aio_pika.IncomingMessage,
-        queue_name: QueueName,
+        queue_name: str,
         reason: str,
         error: Exception,
     ) -> None:
@@ -329,19 +325,17 @@ class MessageConsumer:
             reason: Error reason for logging
             error: Exception that occurred
         """
-        logger.error(
-            f"Permanent error ({reason}) for message from {queue_name.value}: {error}"
-        )
+        logger.error(f"Permanent error ({reason}) for message from {queue_name}: {error}")
 
         # Send to DLQ (nack without requeue)
         await message.nack(requeue=False)
-        self._metrics.record_message_nacked(queue_name.value, requeued=False)
-        self._metrics.record_dlq_message(queue_name.value, reason)
+        self._metrics.record_message_nacked(queue_name, requeued=False)
+        self._metrics.record_dlq_message(queue_name, reason)
 
     async def _handle_channel_closed(
         self,
         message: aio_pika.IncomingMessage,
-        queue_name: QueueName,
+        queue_name: str,
         error: aio_pika.exceptions.ChannelClosed,
     ) -> None:
         """Handle channel closed by broker.
@@ -353,62 +347,61 @@ class MessageConsumer:
             queue_name: Queue where error occurred
             error: ChannelClosed exception with reply_code and reply_text
         """
-        reply_code = error.reply_code
-        reply_text = error.reply_text
+        reply_code = getattr(error, "reply_code", -1)
+        reply_text = getattr(error, "reply_text", str(error))
 
-        logger.error(
-            f"Channel closed for queue {queue_name.value}: "
-            f"[{reply_code}] {reply_text}"
-        )
+        logger.error(f"Channel closed for queue {queue_name}: [{reply_code}] {reply_text}")
 
         # Classify by reply code
         if reply_code == 405:  # RESOURCE_LOCKED
             # Another consumer is processing - requeue
-            logger.warning(f"Queue {queue_name.value} locked, requeuing message")
+            logger.warning(f"Queue {queue_name} locked, requeuing message")
             await message.nack(requeue=True)
-            self._metrics.record_message_nacked(queue_name.value, requeued=True)
-            self._metrics.record_error(queue_name.value, "resource_locked")
+            self._metrics.record_message_nacked(queue_name, requeued=True)
+            self._metrics.record_error(queue_name, "resource_locked")
 
         elif reply_code == 406:  # PRECONDITION_FAILED
             # Queue declaration mismatch - don't requeue
-            logger.error(
-                f"Precondition failed for queue {queue_name.value}: {reply_text}"
-            )
+            logger.error(f"Precondition failed for queue {queue_name}: {reply_text}")
             await message.nack(requeue=False)
-            self._metrics.record_message_nacked(queue_name.value, requeued=False)
-            self._metrics.record_dlq_message(queue_name.value, "precondition_failed")
+            self._metrics.record_message_nacked(queue_name, requeued=False)
+            self._metrics.record_dlq_message(queue_name, "precondition_failed")
 
         elif reply_code == 404:  # NOT_FOUND
             # Queue doesn't exist - don't requeue
-            logger.error(f"Queue {queue_name.value} not found: {reply_text}")
+            logger.error(f"Queue {queue_name} not found: {reply_text}")
             await message.nack(requeue=False)
-            self._metrics.record_message_nacked(queue_name.value, requeued=False)
-            self._metrics.record_dlq_message(queue_name.value, "queue_not_found")
+            self._metrics.record_message_nacked(queue_name, requeued=False)
+            self._metrics.record_dlq_message(queue_name, "queue_not_found")
 
         elif reply_code == 403:  # ACCESS_REFUSED
             # Permission denied - don't requeue
-            logger.error(f"Access denied for queue {queue_name.value}: {reply_text}")
+            logger.error(f"Access denied for queue {queue_name}: {reply_text}")
             await message.nack(requeue=False)
-            self._metrics.record_message_nacked(queue_name.value, requeued=False)
-            self._metrics.record_dlq_message(queue_name.value, "access_denied")
+            self._metrics.record_message_nacked(queue_name, requeued=False)
+            self._metrics.record_dlq_message(queue_name, "access_denied")
 
         elif reply_code >= 500:
             # Broker error - might be transient, requeue
             logger.warning(
-                f"Broker error [{reply_code}] for queue {queue_name.value}, requeuing: {reply_text}"
+                f"Broker error [{reply_code}] for queue {queue_name}, requeuing: {reply_text}"
             )
             await message.nack(requeue=True)
-            self._metrics.record_message_nacked(queue_name.value, requeued=True)
-            self._metrics.record_error(queue_name.value, f"broker_error_{reply_code}")
+            self._metrics.record_message_nacked(queue_name, requeued=True)
+            self._metrics.record_error(queue_name, f"broker_error_{reply_code}")
 
         else:
             # Unknown error - don't requeue, send to DLQ
             logger.error(
-                f"Unknown channel error [{reply_code}] for queue {queue_name.value}: {reply_text}"
+                f"Unknown channel error [{reply_code}] for queue {queue_name}: {reply_text}"
             )
             await message.nack(requeue=False)
-            self._metrics.record_message_nacked(queue_name.value, requeued=False)
-            self._metrics.record_dlq_message(queue_name.value, f"channel_error_{reply_code}")
+            self._metrics.record_message_nacked(queue_name, requeued=False)
+            self._metrics.record_dlq_message(queue_name, f"channel_error_{reply_code}")
+
+    async def _stop(self) -> None:
+        """Finalize internal consumer loop state after shutdown request."""
+        self._consuming = False
 
     async def health_check(self) -> bool:
         """Check if consumer is healthy.
@@ -481,8 +474,7 @@ def message_handler(
                 )
 
                 logger.info(
-                    f"Handler completed: {handler_func.__name__} "
-                    f"(latency={latency_ms:.2f}ms)"
+                    f"Handler completed: {handler_func.__name__} (latency={latency_ms:.2f}ms)"
                 )
 
                 return result
@@ -495,8 +487,7 @@ def message_handler(
                 )
 
                 logger.error(
-                    f"Handler failed: {handler_func.__name__} "
-                    f"(error={type(e).__name__}): {e}"
+                    f"Handler failed: {handler_func.__name__} (error={type(e).__name__}): {e}"
                 )
 
                 # Re-raise for callback to handle ack/nack
@@ -505,4 +496,3 @@ def message_handler(
         return wrapper
 
     return decorator
-

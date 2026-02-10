@@ -8,8 +8,7 @@ volumes:
   postgres-data:
   redis-data:
   rabbitmq-data:
-  airflow-logs:
-  model-weights:
+  artifacts:
 
 services:
   postgres:
@@ -69,305 +68,137 @@ services:
       timeout: 10s
       retries: 5
 
-  # FETCHERS
-  api-gateway:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.api
-      args:
-        SERVICE_PATH: src/services/api_gateway
-    container_name: researcher-api-gateway
-    profiles: [fetchers, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
+  # ARXIV FETCHER (Scheduler)
   arxiv-fetcher:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
-      args:
-        SERVICE_PATH: src/services/fetchers/arxiv
     container_name: researcher-arxiv-fetcher
-    profiles: [fetchers, all]
     restart: unless-stopped
-    # Docker uses root .env automatically
+    command: python -m src.main scheduler --interval 30
     environment:
       - DB_HOST=postgres
       - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  kaggle-fetcher:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.worker
-      args:
-        SERVICE_PATH: src/services/fetchers/kaggle
-    container_name: researcher-kaggle-fetcher
-    profiles: [fetchers, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  huggingface-fetcher:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.worker
-      args:
-        SERVICE_PATH: src/services/fetchers/huggingface
-    container_name: researcher-huggingface-fetcher
-    profiles: [fetchers, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  web-search-fetcher:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.worker
-      args:
-        SERVICE_PATH: src/services/fetchers/web_search
-    container_name: researcher-web-search-fetcher
-    profiles: [fetchers, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  # INTELLIGENCE
-  llm-router:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.api
-      args:
-        SERVICE_PATH: src/services/llm_router
-    container_name: researcher-llm-router
-    profiles: [intelligence, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    networks:
-      - researcher-net
-
-  deduplication:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.worker
-      args:
-        SERVICE_PATH: src/services/deduplication
-    container_name: researcher-deduplication
-    profiles: [intelligence, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  extraction:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.worker
-      args:
-        SERVICE_PATH: src/services/extraction
-    container_name: researcher-extraction
-    profiles: [intelligence, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  synthesis:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.worker
-      args:
-        SERVICE_PATH: src/services/synthesis
-    container_name: researcher-synthesis
-    profiles: [intelligence, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  # DELIVERY
-  digest-generation:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.api
-      args:
-        SERVICE_PATH: src/services/digest_generation
-    container_name: researcher-digest-generation
-    profiles: [delivery, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  search:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.api
-      args:
-        SERVICE_PATH: src/services/search
-    container_name: researcher-search
-    profiles: [delivery, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  dashboard:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.dashboard
-    container_name: researcher-dashboard
-    profiles: [delivery, all, dev]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    ports:
-      - "8501:8501"
-    networks:
-      - researcher-net
-
-  # LEARNING
-  feedback:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.api
-      args:
-        SERVICE_PATH: src/services/feedback
-    container_name: researcher-feedback
-    profiles: [learning, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
-  learning:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.worker
-      args:
-        SERVICE_PATH: src/services/learning
-    container_name: researcher-learning
-    profiles: [learning, all]
-    restart: unless-stopped
-    # Docker uses root .env automatically
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
+      - ARTIFACTS_BASE_DIR=/app/artifacts
     volumes:
-      - model-weights:/app/models
+      - artifacts:/app/artifacts
     depends_on:
+      rabbitmq:
+        condition: service_healthy
       postgres:
         condition: service_healthy
+    networks:
+      - researcher-net
+
+  # PAPER TRIAGE WORKER
+  paper-triage:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: researcher-paper-triage
+    restart: unless-stopped
+    command: python -m src.main worker triage
+    environment:
+      - DB_HOST=postgres
+      - RABBITMQ_HOST=rabbitmq
+      - ARTIFACTS_BASE_DIR=/app/artifacts
+      - CUSTOM_LLM_BASE_URL=${CUSTOM_LLM_BASE_URL}
+      - CUSTOM_LLM_API_KEY=${CUSTOM_LLM_API_KEY}
+      - CUSTOM_LLM_MODEL=${CUSTOM_LLM_MODEL}
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - researcher-net
+
+  # PDF PARSER WORKER
+  pdf-parser:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: researcher-pdf-parser
+    restart: unless-stopped
+    command: python -m src.main worker pdf_parser
+    environment:
+      - DB_HOST=postgres
+      - RABBITMQ_HOST=rabbitmq
+      - ARTIFACTS_BASE_DIR=/app/artifacts
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
       rabbitmq:
         condition: service_healthy
     networks:
       - researcher-net
 
-  # ORCHESTRATION
-  airflow:
+  # CONCEPT GENERATOR WORKER
+  concept-generator:
     build:
       context: ../../
-      dockerfile: infra/docker/Dockerfile.airflow
-    container_name: researcher-airflow
-    profiles: [orchestration, all]
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: researcher-concept-generator
     restart: unless-stopped
+    command: python -m src.main worker concept_gen
     environment:
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres:5432/airflow
-      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
-      DB_HOST: postgres
-      RABBITMQ_HOST: rabbitmq
+      - DB_HOST=postgres
+      - RABBITMQ_HOST=rabbitmq
+      - ARTIFACTS_BASE_DIR=/app/artifacts
+      - CUSTOM_LLM_BASE_URL=${CUSTOM_LLM_BASE_URL}
+      - CUSTOM_LLM_API_KEY=${CUSTOM_LLM_API_KEY}
+      - CUSTOM_LLM_MODEL=${CUSTOM_LLM_MODEL}
     volumes:
-      - ../airflow/dags:/opt/airflow/dags
-      - ../airflow/plugins:/opt/airflow/plugins
-      - airflow-logs:/opt/airflow/logs
-    ports:
-      - "8080:8080"
+      - artifacts:/app/artifacts
     depends_on:
+      rabbitmq:
+        condition: service_healthy
       postgres:
         condition: service_healthy
     networks:
       - researcher-net
 
-# NOTE: This compose file uses the root .env file automatically
-# Docker-specific overrides (service names) are set via environment: below
+  # EXPERIMENT EXPLODER WORKER
+  experiment-exploder:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: researcher-experiment-exploder
+    restart: unless-stopped
+    command: python -m src.main worker experiment_exploder
+    environment:
+      - DB_HOST=postgres
+      - RABBITMQ_HOST=rabbitmq
+      - ARTIFACTS_BASE_DIR=/app/artifacts
+      - CUSTOM_LLM_BASE_URL=${CUSTOM_LLM_BASE_URL}
+      - CUSTOM_LLM_API_KEY=${CUSTOM_LLM_API_KEY}
+      - CUSTOM_LLM_MODEL=${CUSTOM_LLM_MODEL}
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - researcher-net
+
+  # NOTIFIER WORKER
+  notifier:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: researcher-notifier
+    restart: unless-stopped
+    command: python -m src.main worker notifier
+    environment:
+      - DB_HOST=postgres
+      - RABBITMQ_HOST=rabbitmq
+      - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}
+      - SLACK_CHANNEL=${SLACK_CHANNEL}
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - researcher-net
