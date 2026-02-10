@@ -5,7 +5,8 @@ No LLM-based query expansion - simple category-based fetching.
 """
 
 from typing import List
-from pydantic import BaseModel, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 # Hardcoded ArXiv categories for MFT quant research
@@ -21,7 +22,6 @@ HARDCODED_CATEGORIES: List[str] = [
     "cs.SY",  # Systems and Control
     "cs.MA",  # Multiagent Systems
     "cs.IT",  # Information Theory (CS)
-
     # Statistics & Statistical Learning
     "stat.ML",  # Machine Learning (Statistics)
     "stat.TH",  # Statistics Theory
@@ -29,7 +29,6 @@ HARDCODED_CATEGORIES: List[str] = [
     "stat.CO",  # Computational Statistics
     "math.ST",  # Statistics (Mathematics)
     "math.PR",  # Probability Theory
-
     # Quantitative Finance (directly relevant)
     "q-fin.TR",  # Trading and Market Microstructure
     "q-fin.CP",  # Computational Finance
@@ -37,13 +36,11 @@ HARDCODED_CATEGORIES: List[str] = [
     "q-fin.PM",  # Portfolio Management
     "q-fin.RM",  # Risk Management
     "q-fin.GN",  # General Finance
-
     # Optimization, Control & Decision Systems
     "math.OC",  # Optimization and Control
     "math.CT",  # Control Theory
     "eess.SY",  # Systems and Control (engineering)
     "eess.SP",  # Signal Processing
-
     # Dynamical Systems & Nonlinear Science
     "math.DS",  # Dynamical Systems
     "nlin.AO",  # Adaptation and Self-Organizing Systems
@@ -51,29 +48,23 @@ HARDCODED_CATEGORIES: List[str] = [
     "nlin.CG",  # Cellular Automata and Lattice Gases
     "nlin.PS",  # Pattern Formation and Solitons
     "nlin.SI",  # Exactly Solvable and Integrable Systems
-
     # Statistical Physics & Complex Systems
     "cond-mat.stat-mech",  # Statistical Mechanics
     "cond-mat.dis-nn",  # Disordered Systems and Neural Networks
     "physics.soc-ph",  # Physics of Society (complex systems, networks)
     "physics.data-an",  # Data Analysis, Statistics and Probability
-
     # Fluid Dynamics & Turbulence (useful for cascade/regime analogies)
     "physics.flu-dyn",  # Fluid Dynamics
-
     # Networks, Traffic & Queueing Analogies
     "physics.soc-ph",  # Complex social/network systems
     "cs.NI",  # Networking and Internet Architecture
     "cs.DC",  # Distributed, Parallel, and Cluster Computing
-
     # Information Theory & Signal Models
     "math.IT",  # Information Theory
     "cs.IT",  # Information Theory (CS)
-
     # Applied Probability & Queueing-Relevant Fields
     "math.PR",  # Probability Theory
     "stat.TH",  # Statistical Theory
-
     # Computational & Numerical Methods
     "cs.NA",  # Numerical Analysis
     "math.NA",  # Numerical Analysis
@@ -81,7 +72,7 @@ HARDCODED_CATEGORIES: List[str] = [
 ]
 
 
-class ArxivFetcherConfig(BaseModel):
+class ArxivFetcherConfig(BaseSettings):
     """Configuration for ArXiv fetcher worker.
 
     Categories are hardcoded - only fetch parameters are configurable.
@@ -118,5 +109,9 @@ class ArxivFetcherConfig(BaseModel):
         default=30, ge=1, le=365, description="Days to look back for duplicate detection"
     )
 
-    class Config:
-        env_prefix = "ARXIV_"
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+        env_prefix="ARXIV_",
+    )

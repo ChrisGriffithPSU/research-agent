@@ -1,4 +1,5 @@
 """Database configuration and async engine management."""
+
 import os
 from typing import Optional
 
@@ -23,6 +24,7 @@ class DatabaseConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        env_prefix="DB_",
     )
 
     # Database connection parameters
@@ -33,37 +35,29 @@ class DatabaseConfig(BaseSettings):
     name: str = Field(default="researcher_agent", description="Database name")
 
     # Connection pool settings
-    pool_size: int = Field(
-        default=5,
-        description="Number of connections to maintain in pool"
-    )
+    pool_size: int = Field(default=5, description="Number of connections to maintain in pool")
     max_overflow: int = Field(
-        default=10,
-        description="Maximum overflow connections beyond pool_size"
+        default=10, description="Maximum overflow connections beyond pool_size"
     )
     pool_recycle: int = Field(
-        default=3600,
-        description="Recycle connections after this many seconds (1 hour)"
+        default=3600, description="Recycle connections after this many seconds (1 hour)"
     )
     pool_timeout: int = Field(
-        default=30,
-        description="Seconds to wait before giving up on getting a connection"
+        default=30, description="Seconds to wait before giving up on getting a connection"
     )
     pool_pre_ping: bool = Field(
-        default=True,
-        description="Test connections for liveness before using them"
+        default=True, description="Test connections for liveness before using them"
     )
 
     # SQL logging
-    echo: bool = Field(
-        default=False,
-        description="Echo SQL statements to stdout (DEBUG mode)"
-    )
+    echo: bool = Field(default=False, description="Echo SQL statements to stdout (DEBUG mode)")
 
     @property
     def database_url(self) -> str:
         """Construct async PostgreSQL connection URL."""
-        return f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        return (
+            f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
+        )
 
     @field_validator("host")
     @classmethod
@@ -141,4 +135,3 @@ async def dispose_engine() -> None:
         await _async_engine.dispose()
         _async_engine = None
         _async_session_maker = None
-

@@ -1,4 +1,5 @@
 """RabbitMQ configuration and connection URL management."""
+
 import logging
 from typing import Optional
 
@@ -18,98 +19,67 @@ class MessagingConfig(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        env_prefix="RABBITMQ_",
     )
 
     # RabbitMQ connection parameters
-    host: str = Field(
-        default="localhost",
-        description="RabbitMQ host address"
-    )
-    port: int = Field(
-        default=5672,
-        description="RabbitMQ AMQP port"
-    )
-    user: str = Field(
-        default="guest",
-        description="RabbitMQ username"
-    )
-    password: str = Field(
-        default="guest",
-        description="RabbitMQ password"
-    )
-    virtual_host: str = Field(
-        default="/",
-        description="RabbitMQ virtual host"
-    )
+    host: str = Field(default="localhost", description="RabbitMQ host address")
+    port: int = Field(default=5672, description="RabbitMQ AMQP port")
+    user: str = Field(default="guest", description="RabbitMQ username")
+    password: str = Field(default="guest", description="RabbitMQ password")
+    virtual_host: str = Field(default="/", description="RabbitMQ virtual host")
 
     # Connection settings
-    heartbeat: int = Field(
-        default=60,
-        description="Heartbeat interval in seconds"
-    )
-    connection_timeout: int = Field(
-        default=30,
-        description="Connection timeout in seconds"
-    )
+    heartbeat: int = Field(default=60, description="Heartbeat interval in seconds")
+    connection_timeout: int = Field(default=30, description="Connection timeout in seconds")
     blocked_connection_timeout: int = Field(
-        default=30,
-        description="Blocked connection timeout in seconds"
+        default=30, description="Blocked connection timeout in seconds"
     )
 
     # Queue configuration
     queue_max_length: int = Field(
-        default=10000,
-        description="Default maximum queue length (0 for unlimited)"
+        default=10000, description="Default maximum queue length (0 for unlimited)"
     )
     queue_message_ttl: Optional[int] = Field(
         default=86400000,  # 24 hours in milliseconds
-        description="Default message TTL in milliseconds (None for no expiration)"
+        description="Default message TTL in milliseconds (None for no expiration)",
     )
 
     # Retry configuration
     publish_retry_max_attempts: int = Field(
-        default=3,
-        description="Max retry attempts for publishing"
+        default=3, description="Max retry attempts for publishing"
     )
     publish_retry_base_delay: float = Field(
-        default=1.0,
-        description="Base delay for retry backoff in seconds"
+        default=1.0, description="Base delay for retry backoff in seconds"
     )
     publish_retry_max_delay: float = Field(
-        default=60.0,
-        description="Maximum delay for retry backoff in seconds"
+        default=60.0, description="Maximum delay for retry backoff in seconds"
     )
 
     # Circuit breaker configuration
     circuit_breaker_failure_threshold: int = Field(
-        default=3,
-        description="Number of failures before circuit opens"
+        default=3, description="Number of failures before circuit opens"
     )
     circuit_breaker_timeout: float = Field(
-        default=60.0,
-        description="Circuit breaker timeout in seconds before half-open"
+        default=60.0, description="Circuit breaker timeout in seconds before half-open"
     )
 
     # Consumer configuration
     consumer_prefetch_count: int = Field(
-        default=10,
-        description="Number of messages to prefetch (QoS)"
+        default=10, description="Number of messages to prefetch (QoS)"
     )
 
     # Publisher configuration
     message_persistence: bool = Field(
-        default=True,
-        description="Enable message persistence (messages survive broker restart)"
+        default=True, description="Enable message persistence (messages survive broker restart)"
     )
     publisher_confirms: bool = Field(
-        default=True,
-        description="Enable publisher confirms (wait for broker acknowledgment)"
+        default=True, description="Enable publisher confirms (wait for broker acknowledgment)"
     )
 
     # Queue features configuration
     alternate_exchange_enabled: bool = Field(
-        default=True,
-        description="Enable alternate exchange for unroutable messages"
+        default=True, description="Enable alternate exchange for unroutable messages"
     )
 
     @property
@@ -117,10 +87,7 @@ class MessagingConfig(BaseSettings):
         """Construct AMQP connection URL."""
         # Strip leading slash from virtual_host to avoid double slashes in URL
         vhost = self.virtual_host.lstrip("/") if self.virtual_host != "/" else ""
-        return (
-            f"amqp://{self.user}:{self.password}@{self.host}:{self.port}"
-            f"/{vhost}"
-        )
+        return f"amqp://{self.user}:{self.password}@{self.host}:{self.port}/{vhost}"
 
     @field_validator("queue_max_length")
     @classmethod
@@ -141,4 +108,3 @@ class MessagingConfig(BaseSettings):
 
 # Global configuration instance (loaded from environment)
 messaging_config = MessagingConfig()
-

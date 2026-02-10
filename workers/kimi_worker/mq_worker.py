@@ -63,7 +63,7 @@ def _rabbitmq_url_from_env() -> str:
     port = int(os.getenv("RABBITMQ_PORT", "5672"))
     user = os.getenv("RABBITMQ_USER", "guest")
     password = os.getenv("RABBITMQ_PASSWORD", "guest")
-    vhost = os.getenv("RABBITMQ_VHOST", "/")
+    vhost = os.getenv("RABBITMQ_VHOST") or os.getenv("RABBITMQ_VIRTUAL_HOST", "/")
     if not vhost.startswith("/"):
         vhost = f"/{vhost}"
     return f"amqp://{user}:{password}@{host}:{port}{vhost}"
