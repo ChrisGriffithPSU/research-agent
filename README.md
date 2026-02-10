@@ -18,7 +18,7 @@ ArXiv Fetcher (cron) → Paper Triage (LLM) → PDF Parser → Concept Generator
 - **Notifier**: Sends Slack notifications (future)
 
 **Key Features:**
-- Single OpenAI-compatible LLM client (custom endpoint support)
+- OpenAI-compatible LLM client with per-agent model overrides
 - Local filesystem artifact storage (swappable for S3)
 - Cron-based scheduling
 - Duplicate detection via database
@@ -29,23 +29,36 @@ ArXiv Fetcher (cron) → Paper Triage (LLM) → PDF Parser → Concept Generator
 Environment variables:
 
 ```bash
-# LLM (Custom OpenAI-compatible endpoint)
+# LLM global defaults (OpenAI-compatible endpoint)
 CUSTOM_LLM_BASE_URL=https://your-endpoint.com/v1
 CUSTOM_LLM_API_KEY=your-api-key
-CUSTOM_LLM_MODEL=your-model-name
+CUSTOM_LLM_MODEL=default-model
+
+# Optional per-agent model overrides
+CUSTOM_LLM_TRIAGE_MODEL=triage-model
+CUSTOM_LLM_CONCEPT_GEN_MODEL=concept-model
+CUSTOM_LLM_EXPERIMENT_EXPLODER_MODEL=experiment-model
 
 # ArXiv Fetcher
 ARXIV_FETCH_INTERVAL_MINUTES=30
 ARXIV_MAX_RESULTS_PER_CATEGORY=50
 
 # RabbitMQ
-RABBITMQ_URL=amqp://localhost:5672
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USER=guest
+RABBITMQ_PASSWORD=guest
+RABBITMQ_VIRTUAL_HOST=/
 
 # Storage
 ARTIFACTS_BASE_DIR=./artifacts
 
 # Database
-DATABASE_URL=postgresql+asyncpg://user:pass@localhost/research
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=researcher_agent
 ```
 
 ## Usage

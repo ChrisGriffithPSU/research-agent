@@ -5,6 +5,7 @@ base URL, API key, and model name via environment variables.
 """
 
 import os
+import re
 import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Protocol
@@ -61,12 +62,21 @@ class ILLMClient(Protocol):
 class OpenAIClient:
     """OpenAI-compatible client for custom endpoints.
 
-    Configured via environment variables:
-    - CUSTOM_LLM_BASE_URL: Base URL for the API endpoint
-    - CUSTOM_LLM_API_KEY: API key for authentication
-    - CUSTOM_LLM_MODEL: Model name to use (default: "default")
-    - CUSTOM_LLM_MAX_RETRIES: Max retries for failed requests (default: 3)
-    - CUSTOM_LLM_TIMEOUT_SECONDS: Request timeout (default: 120)
+    Configured via environment variables.
+
+    Global defaults:
+    - CUSTOM_LLM_BASE_URL
+    - CUSTOM_LLM_API_KEY
+    - CUSTOM_LLM_MODEL
+    - CUSTOM_LLM_MAX_RETRIES
+    - CUSTOM_LLM_TIMEOUT_SECONDS
+
+    Optional per-agent overrides (when `profile` is provided):
+    - CUSTOM_LLM_<PROFILE>_BASE_URL
+    - CUSTOM_LLM_<PROFILE>_API_KEY
+    - CUSTOM_LLM_<PROFILE>_MODEL
+    - CUSTOM_LLM_<PROFILE>_MAX_RETRIES
+    - CUSTOM_LLM_<PROFILE>_TIMEOUT_SECONDS
 
     Example:
         client = OpenAIClient()
@@ -84,6 +94,7 @@ class OpenAIClient:
         model: Optional[str] = None,
         max_retries: Optional[int] = None,
         timeout_seconds: Optional[float] = None,
+        profile: Optional[str] = None,
     ):
         """Initialize OpenAI client.
 
@@ -93,16 +104,27 @@ class OpenAIClient:
             model: Model name (falls back to env var)
             max_retries: Max retry attempts (falls back to env var)
             timeout_seconds: Request timeout (falls back to env var)
+            profile: Optional agent profile for env override lookup
         """
-        self.base_url = base_url or os.getenv("CUSTOM_LLM_BASE_URL", "https://api.openai.com/v1")
-        self.api_key = api_key or os.getenv("CUSTOM_LLM_API_KEY", "")
-        self.model = model or os.getenv("CUSTOM_LLM_MODEL", "default")
-        self.max_retries = max_retries or int(os.getenv("CUSTOM_LLM_MAX_RETRIES", "3"))
+        self.profile = self._normalize_profile(profile)
+
+        self.base_url = base_url or self._get_env_value(
+            "BASE_URL",
+            default="https://api.openai.com/v1",
+        )
+        self.api_key = api_key or self._get_env_value("API_KEY", default="")
+        self.model = model or self._get_env_value("MODEL", default="default")
+        self.max_retries = max_retries or int(self._get_env_value("MAX_RETRIES", default="3"))
         self.timeout_seconds = timeout_seconds or float(
-            os.getenv("CUSTOM_LLM_TIMEOUT_SECONDS", "120")
+            self._get_env_value("TIMEOUT_SECONDS", default="120")
         )
 
         if not self.api_key:
+            if self.profile:
+                raise LLMError(
+                    "LLM API key not set. Expected CUSTOM_LLM_"
+                    f"{self.profile}_API_KEY or CUSTOM_LLM_API_KEY"
+                )
             raise LLMError("CUSTOM_LLM_API_KEY environment variable not set")
 
         self._client = AsyncOpenAI(
@@ -111,6 +133,26 @@ class OpenAIClient:
             max_retries=self.max_retries,
             timeout=self.timeout_seconds,
         )
+
+    @staticmethod
+    def _normalize_profile(profile: Optional[str]) -> Optional[str]:
+        if profile is None:
+            return None
+        normalized = re.sub(r"[^A-Za-z0-9]+", "_", profile.strip()).strip("_").upper()
+        return normalized or None
+
+    def _get_env_value(self, key_suffix: str, default: str) -> str:
+        if self.profile:
+            profile_key = f"CUSTOM_LLM_{self.profile}_{key_suffix}"
+            value = os.getenv(profile_key)
+            if value not in (None, ""):
+                return value
+
+        default_key = f"CUSTOM_LLM_{key_suffix}"
+        value = os.getenv(default_key)
+        if value in (None, ""):
+            return default
+        return value
 
     async def complete(
         self,

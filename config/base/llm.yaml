@@ -1,11 +1,17 @@
 # LLM Configuration
 
 provider:
-  # Single OpenAI-compatible provider
+  # OpenAI-compatible provider
   type: openai
   base_url_env: CUSTOM_LLM_BASE_URL
   api_key_env: CUSTOM_LLM_API_KEY
   model_env: CUSTOM_LLM_MODEL
+
+  # Optional per-agent model env overrides
+  model_env_overrides:
+    triage: CUSTOM_LLM_TRIAGE_MODEL
+    concept_gen: CUSTOM_LLM_CONCEPT_GEN_MODEL
+    experiment_exploder: CUSTOM_LLM_EXPERIMENT_EXPLODER_MODEL
   
   # Retry settings
   max_retries: 3

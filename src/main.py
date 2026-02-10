@@ -107,13 +107,10 @@ def worker(
         consumer = MessageConsumer(connection)
         publisher = MessagePublisher(cast(IMessageConnection, connection))
 
-        # Create LLM client (for LLM workers)
-        llm = OpenAIClient()
-
         # Create worker based on name
         if name == "triage":
             w = PaperTriageWorker(
-                llm_client=llm,
+                llm_client=OpenAIClient(profile="triage"),
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
@@ -124,13 +121,13 @@ def worker(
             )
         elif name == "concept_gen":
             w = ConceptGeneratorWorker(
-                llm_client=llm,
+                llm_client=OpenAIClient(profile="concept_gen"),
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
         elif name == "experiment_exploder":
             w = ExperimentExploderWorker(
-                llm_client=llm,
+                llm_client=OpenAIClient(profile="experiment_exploder"),
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
@@ -172,7 +169,7 @@ def health_check(
         # Check LLM
         console.print("Checking LLM...", end=" ")
         try:
-            llm = OpenAIClient()
+            llm = OpenAIClient(profile="triage")
             healthy = await llm.health_check()
             if healthy:
                 console.print("[green]OK[/green]")

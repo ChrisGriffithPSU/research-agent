@@ -12,8 +12,24 @@ from src.shared.llm import openai_client as module
 
 def test_init_requires_api_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CUSTOM_LLM_API_KEY", raising=False)
+    monkeypatch.delenv("CUSTOM_LLM_TRIAGE_API_KEY", raising=False)
     with pytest.raises(LLMError):
         module.OpenAIClient(base_url="https://example", api_key="", model="m")
+
+
+def test_profile_specific_env_overrides_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CUSTOM_LLM_API_KEY", "global-key")
+    monkeypatch.setenv("CUSTOM_LLM_MODEL", "global-model")
+    monkeypatch.setenv("CUSTOM_LLM_TRIAGE_MODEL", "triage-model")
+    client = module.OpenAIClient(profile="triage")
+    assert client.model == "triage-model"
+
+
+def test_profile_specific_key_falls_back_to_global(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("CUSTOM_LLM_API_KEY", "global-key")
+    monkeypatch.delenv("CUSTOM_LLM_CONCEPT_GEN_API_KEY", raising=False)
+    client = module.OpenAIClient(profile="concept_gen")
+    assert client.api_key == "global-key"
 
 
 @pytest.mark.asyncio

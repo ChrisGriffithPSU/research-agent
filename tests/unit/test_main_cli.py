@@ -48,7 +48,8 @@ def test_worker_unknown_name_exits_with_code_1(monkeypatch: pytest.MonkeyPatch) 
             return None
 
     class _LLM:
-        pass
+        def __init__(self, *args, **kwargs):
+            pass
 
     monkeypatch.setattr(main_module, "setup_logging", lambda verbose=False: None)
     monkeypatch.setattr(main_module, "RabbitMQConnection", _Conn)
@@ -63,7 +64,7 @@ def test_worker_unknown_name_exits_with_code_1(monkeypatch: pytest.MonkeyPatch) 
 
 
 def test_worker_triage_starts_worker_and_closes_connection(monkeypatch: pytest.MonkeyPatch) -> None:
-    state = {"started": 0, "closed": 0}
+    state = {"started": 0, "closed": 0, "profile": None}
 
     class _Conn:
         def __init__(self, config):
@@ -76,7 +77,8 @@ def test_worker_triage_starts_worker_and_closes_connection(monkeypatch: pytest.M
             state["closed"] += 1
 
     class _LLM:
-        pass
+        def __init__(self, *args, **kwargs):
+            state["profile"] = kwargs.get("profile")
 
     class _Worker:
         def __init__(self, **kwargs):
@@ -99,3 +101,4 @@ def test_worker_triage_starts_worker_and_closes_connection(monkeypatch: pytest.M
     main_module.worker(name="triage", verbose=False)
     assert state["started"] == 1
     assert state["closed"] == 1
+    assert state["profile"] == "triage"
