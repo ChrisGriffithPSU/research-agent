@@ -127,7 +127,11 @@ src/
 
 ### Install dependencies
 ```bash
-pip install -e ".[all]"
+# ArXiv/PDF environment (docling + pillow<12)
+UV_PROJECT_ENVIRONMENT=.venv-arxiv uv sync --extra arxiv
+
+# Main environment (everything else, incl. Kimi)
+UV_PROJECT_ENVIRONMENT=.venv-main uv sync --extra main
 ```
 
 ### Run linting

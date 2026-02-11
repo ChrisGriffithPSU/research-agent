@@ -3,7 +3,7 @@ name = "researcher-agent"
 version = "0.1.0"
 description = "Autonomous ML research assistant for quantitative trading research"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 authors = [
     { name = "Your Name", email = "your.email@example.com" }
 ]
@@ -32,8 +32,8 @@ dependencies = [
     # API layer
     "fastapi>=0.115.0",
 
-    # PDF processing
-    "docling>=1.0.0",
+    # NOTE: PDF processing deps live in the `arxiv` extra to avoid
+    # dependency conflicts with the Kimi runtime (pillow pins).
 
     # Utilities
     "python-dotenv>=1.0.0",
@@ -42,34 +42,18 @@ dependencies = [
     "rich>=13.7.0",
     "aioschedule>=0.5.0",
 
-    # Kimi coding agent runtime integration
-    "kimi-agent-sdk>=0.0.4",
-    "kaos",
+    # NOTE: Kimi runtime deps live in the `main` extra.
 ]
 
 [project.optional-dependencies]
-# All optional dependencies (for local development)
-all = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "pytest-httpx>=0.30.0",
-    "aiosqlite>=0.20.0",
+# ArXiv fetcher isolated environment (docling/pillow constrained)
+arxiv = [
+    "docling>=2.59.0",
 ]
 
-# Development dependencies
-dev = [
-    "pytest>=7.4.0",
-    "pytest-asyncio>=0.21.0",
-    "pytest-cov>=4.1.0",
-    "pytest-mock>=3.12.0",
-    "pytest-httpx>=0.30.0",
-    "aiosqlite>=0.20.0",
-    "faker>=22.0.0",
-    "ruff>=0.1.9",
-    "mypy>=1.8.0",
-    "black>=23.12.0",
+# Everything else (Kimi runtime, etc.)
+main = [
+    "kimi-agent-sdk>=0.0.4",
 ]
 
 [build-system]
@@ -80,6 +64,12 @@ build-backend = "hatchling.build"
 packages = ["src/shared", "src/workers", "src/services/fetchers/arxiv", "workers"]
 
 [tool.uv]
+conflicts = [
+    [
+        { extra = "arxiv" },
+        { extra = "main" },
+    ],
+]
 dev-dependencies = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",

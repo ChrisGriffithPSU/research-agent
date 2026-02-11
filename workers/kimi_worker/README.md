@@ -10,7 +10,7 @@ It creates a run workspace, streams agent output, applies policy-based approvals
 2. Install dependencies:
 
 ```bash
-uv sync
+UV_PROJECT_ENVIRONMENT=.venv-main uv sync --extra main
 ```
 
 Optional `.env` overrides (recommended for existing codebases):

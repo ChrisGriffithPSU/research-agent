@@ -28,7 +28,7 @@ Repository conventions (adapt if repo differs, and note differences in logs):
 - Notebooks: notebooks/experiments/
 - Python modules: src/
 - Tests: tests/
-- Dependency setup: uv sync (preferred) or uv pip install -r requirements.txt
+- Dependency setup: uv sync --extra main (preferred) or uv pip install -r requirements.txt
 - Notebook execution: python -m jupyter nbconvert --to notebook --execute ... (or papermill if available)
 
 Hard requirements:

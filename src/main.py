@@ -18,11 +18,6 @@ from src.shared.messaging.config import messaging_config
 from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.publisher import MessagePublisher
 from src.shared.interfaces import IMessageConnection
-from src.workers.paper_triage.worker import PaperTriageWorker
-from src.workers.pdf_parser.worker import PDFParserWorker
-from src.workers.concept_generator.worker import ConceptGeneratorWorker
-from src.workers.experiment_exploder.worker import ExperimentExploderWorker
-from src.workers.notifier.slack_worker import SlackNotifierWorker
 
 
 app = typer.Typer(help="Quant Research Agent CLI")
@@ -109,29 +104,46 @@ def worker(
 
         # Create worker based on name
         if name == "triage":
+            from src.workers.paper_triage.worker import PaperTriageWorker
+
             w = PaperTriageWorker(
                 llm_client=OpenAIClient(profile="triage"),
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
         elif name == "pdf_parser":
+            try:
+                from src.workers.pdf_parser.worker import PDFParserWorker
+            except ImportError:
+                console.print(
+                    "[red]pdf_parser requires the 'arxiv' extra (docling).[\/red]"
+                )
+                console.print("Install with: uv sync --extra arxiv")
+                raise
+
             w = PDFParserWorker(
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
         elif name == "concept_gen":
+            from src.workers.concept_generator.worker import ConceptGeneratorWorker
+
             w = ConceptGeneratorWorker(
                 llm_client=OpenAIClient(profile="concept_gen"),
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
         elif name == "experiment_exploder":
+            from src.workers.experiment_exploder.worker import ExperimentExploderWorker
+
             w = ExperimentExploderWorker(
                 llm_client=OpenAIClient(profile="experiment_exploder"),
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
         elif name == "notifier":
+            from src.workers.notifier.slack_worker import SlackNotifierWorker
+
             w = SlackNotifierWorker(
                 message_consumer=consumer,
                 message_publisher=publisher,

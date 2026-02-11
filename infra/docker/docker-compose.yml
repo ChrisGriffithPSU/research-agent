@@ -73,6 +73,8 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
+      args:
+        UV_EXTRA: main
     container_name: researcher-arxiv-fetcher
     restart: unless-stopped
     command: python -m src.main scheduler --interval 30
@@ -95,6 +97,8 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
+      args:
+        UV_EXTRA: main
     container_name: researcher-paper-triage
     restart: unless-stopped
     command: python -m src.main worker triage
@@ -125,6 +129,8 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
+      args:
+        UV_EXTRA: arxiv
     container_name: researcher-pdf-parser
     restart: unless-stopped
     command: python -m src.main worker pdf_parser
@@ -145,6 +151,8 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
+      args:
+        UV_EXTRA: main
     container_name: researcher-concept-generator
     restart: unless-stopped
     command: python -m src.main worker concept_gen
@@ -175,6 +183,8 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
+      args:
+        UV_EXTRA: main
     container_name: researcher-experiment-exploder
     restart: unless-stopped
     command: python -m src.main worker experiment_exploder
@@ -203,6 +213,8 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
+      args:
+        UV_EXTRA: main
     container_name: researcher-notifier
     restart: unless-stopped
     command: python -m src.main worker notifier

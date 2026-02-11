@@ -13,15 +13,20 @@ from src.services.fetchers.arxiv.schemas.paper import (
     PaperMetadata,
     ParsedContent,
 )
-from src.services.fetchers.arxiv.services import (
-    ArxivAPIClient,
-    PDFProcessor,
-)
+from src.services.fetchers.arxiv.services import ArxivAPIClient
+
+try:
+    # Optional heavy dependency (docling) lives behind the `arxiv` extra.
+    from src.services.fetchers.arxiv.services import PDFProcessor
+except ImportError:  # pragma: no cover
+    PDFProcessor = None  # type: ignore[assignment]
 
 __all__ = [
     "ArxivFetcherConfig",
     "PaperMetadata",
     "ParsedContent",
     "ArxivAPIClient",
-    "PDFProcessor",
 ]
+
+if PDFProcessor is not None:
+    __all__.append("PDFProcessor")

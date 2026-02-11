@@ -4,6 +4,12 @@
 	test test-unit test-integration test-e2e test-cov test-watch test-repo \
 	dev-setup lint lint-fix format format-check type-check deps deps-upgrade clean clean-all quickstart
 
+UV_MAIN_ENV ?= .venv-main
+UV_ARXIV_ENV ?= .venv-arxiv
+
+UV_MAIN = UV_PROJECT_ENVIRONMENT=$(UV_MAIN_ENV) uv
+UV_ARXIV = UV_PROJECT_ENVIRONMENT=$(UV_ARXIV_ENV) uv
+
 help:  ## Show this help message
 	@echo ''
 	@echo 'Usage: make [target]'
@@ -14,19 +20,19 @@ help:  ## Show this help message
 
 # Database targets
 migrate:  ## Run database migrations to create/update schema
-	uv run alembic -c src/shared/db/migrations/alembic.ini upgrade head
+	$(UV_MAIN) run alembic -c src/shared/db/migrations/alembic.ini upgrade head
 
 migrate-create:  ## Create a new migration (use MSG="description")
 	@echo "Creating new migration..."
-	uv run alembic -c src/shared/db/migrations/alembic.ini revision -m "$(MSG)"
+	$(UV_MAIN) run alembic -c src/shared/db/migrations/alembic.ini revision -m "$(MSG)"
 
 migrate-autogen:  ## Auto-generate migration from model changes
 	@echo "Auto-generating migration from model changes..."
-	uv run alembic -c src/shared/db/migrations/alembic.ini revision --autogenerate -m "Auto-generated"
+	$(UV_MAIN) run alembic -c src/shared/db/migrations/alembic.ini revision --autogenerate -m "Auto-generated"
 
 seed:  ## Seed database with initial data
 	@echo "Seeding database..."
-	uv run python -m src.shared.db.seed
+	$(UV_MAIN) run python -m src.shared.db.seed
 
 db-shell:  ## Open PostgreSQL shell (psql)
 	docker exec -it researcher-postgres psql -U postgres -d researcher_agent
@@ -79,85 +85,94 @@ services-logs:  ## Follow logs for worker services
 
 worker-kimi:  ## Run Kimi worker in queue mode locally
 	@echo "Starting local Kimi queue worker..."
-	uv run python -m src.main worker kimi
+	$(UV_MAIN) run python -m src.main worker kimi
 
 scheduler:  ## Run scheduler locally
 	@echo "Starting scheduler..."
-	uv run python -m src.main scheduler
+	$(UV_MAIN) run python -m src.main scheduler
 
 fetch-once:  ## Trigger one scheduler fetch cycle locally
 	@echo "Running one fetch cycle..."
-	uv run python -m src.main fetch-once
+	$(UV_MAIN) run python -m src.main fetch-once
 
 health-check:  ## Run app health checks locally
 	@echo "Running health checks..."
-	uv run python -m src.main health-check
+	$(UV_MAIN) run python -m src.main health-check
 
 # Testing targets
 test:  ## Run all tests
 	@echo "Running tests..."
-	uv run pytest
+	$(UV_MAIN) run pytest
 
 test-unit:  ## Run unit tests only
 	@echo "Running unit tests..."
-	uv run pytest tests/unit
+	$(UV_MAIN) run pytest tests/unit
 
 test-integration:  ## Run integration tests only
 	@echo "Running integration tests..."
-	uv run pytest tests/integration
+	$(UV_MAIN) run pytest tests/integration
 
 test-e2e:  ## Run end-to-end tests only
 	@echo "Running end-to-end tests..."
-	uv run pytest tests/e2e
+	$(UV_MAIN) run pytest tests/e2e
 
 test-cov:  ## Run tests with coverage report
 	@echo "Running tests with coverage..."
-	uv run pytest --cov=src/shared --cov-report=html --cov-report=term
+	$(UV_MAIN) run pytest --cov=src/shared --cov-report=html --cov-report=term
 
 test-watch:  ## Run tests in watch mode
 	@echo "Running tests in watch mode..."
-	uv run pytest -f
+	$(UV_MAIN) run pytest -f
 
 test-repo:  ## Run repository tests
 	@echo "Running repository tests..."
-	uv run pytest tests/unit/shared/repositories
+	$(UV_MAIN) run pytest tests/unit/shared/repositories
 
 # Development targets
 dev-setup:  ## Setup development environment
 	@echo "Setting up development environment..."
-	uv sync
+	$(MAKE) deps
 	$(MAKE) migrate
 	$(MAKE) seed
 	@echo "Development setup complete!"
 
 lint:  ## Run linter (ruff)
 	@echo "Running linter..."
-	uv run ruff check src workers tests
+	$(UV_MAIN) run ruff check src workers tests
 
 lint-fix:  ## Auto-fix linter issues
 	@echo "Fixing linter issues..."
-	uv run ruff check --fix src workers tests
+	$(UV_MAIN) run ruff check --fix src workers tests
 
 format:  ## Format code (black)
 	@echo "Formatting code..."
-	uv run black src workers tests
+	$(UV_MAIN) run black src workers tests
 
 format-check:  ## Check code formatting
 	@echo "Checking code formatting..."
-	uv run black --check src workers tests
+	$(UV_MAIN) run black --check src workers tests
 
 type-check:  ## Run type checker (mypy)
 	@echo "Running type checker..."
-	uv run mypy src workers
+	$(UV_MAIN) run mypy src workers
 
 # Utility targets
+deps-main:  ## Install main environment dependencies (.venv-main)
+	@echo "Installing main dependencies into $(UV_MAIN_ENV)..."
+	$(UV_MAIN) sync --extra main
+
+deps-arxiv:  ## Install ArXiv/PDF environment dependencies (.venv-arxiv)
+	@echo "Installing ArXiv dependencies into $(UV_ARXIV_ENV)..."
+	$(UV_ARXIV) sync --extra arxiv
+
 deps:  ## Install dependencies
 	@echo "Installing dependencies..."
-	uv sync
+	$(MAKE) deps-main
+	$(MAKE) deps-arxiv
 
 deps-upgrade:  ## Upgrade dependencies
 	@echo "Upgrading dependencies..."
-	uv sync --upgrade
+	$(UV_MAIN) sync --upgrade
 
 clean:  ## Clean build artifacts
 	@echo "Cleaning build artifacts..."

@@ -25,6 +25,7 @@ MANIFEST
 # Virtual environments
 .env
 .venv
+.venv-*/
 env/
 venv/
 ENV/
@@ -33,7 +34,6 @@ venv.bak/
 
 # uv
 .uv/
-uv.lock
 
 # PyInstaller
 *.manifest
