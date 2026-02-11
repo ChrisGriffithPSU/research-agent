@@ -12,7 +12,6 @@ import typer
 from rich.console import Console
 from rich.logging import RichHandler
 
-from src.shared.llm.openai_client import OpenAIClient
 from src.shared.messaging.connection import RabbitMQConnection
 from src.shared.messaging.config import messaging_config
 from src.shared.messaging.consumer import MessageConsumer
@@ -105,6 +104,12 @@ def worker(
         # Create worker based on name
         if name == "triage":
             from src.workers.paper_triage.worker import PaperTriageWorker
+            try:
+                from src.shared.llm.openai_client import OpenAIClient
+            except ImportError:
+                console.print("[red]triage requires the 'main' extra (openai).[/red]")
+                console.print("Install with: uv sync --extra main")
+                raise
 
             w = PaperTriageWorker(
                 llm_client=OpenAIClient(profile="triage"),
@@ -116,7 +121,7 @@ def worker(
                 from src.workers.pdf_parser.worker import PDFParserWorker
             except ImportError:
                 console.print(
-                    "[red]pdf_parser requires the 'arxiv' extra (docling).[\/red]"
+                    "[red]pdf_parser requires the 'arxiv' extra (docling).[/red]"
                 )
                 console.print("Install with: uv sync --extra arxiv")
                 raise
@@ -127,6 +132,12 @@ def worker(
             )
         elif name == "concept_gen":
             from src.workers.concept_generator.worker import ConceptGeneratorWorker
+            try:
+                from src.shared.llm.openai_client import OpenAIClient
+            except ImportError:
+                console.print("[red]concept_gen requires the 'main' extra (openai).[/red]")
+                console.print("Install with: uv sync --extra main")
+                raise
 
             w = ConceptGeneratorWorker(
                 llm_client=OpenAIClient(profile="concept_gen"),
@@ -135,6 +146,14 @@ def worker(
             )
         elif name == "experiment_exploder":
             from src.workers.experiment_exploder.worker import ExperimentExploderWorker
+            try:
+                from src.shared.llm.openai_client import OpenAIClient
+            except ImportError:
+                console.print(
+                    "[red]experiment_exploder requires the 'main' extra (openai).[/red]"
+                )
+                console.print("Install with: uv sync --extra main")
+                raise
 
             w = ExperimentExploderWorker(
                 llm_client=OpenAIClient(profile="experiment_exploder"),
@@ -181,12 +200,19 @@ def health_check(
         # Check LLM
         console.print("Checking LLM...", end=" ")
         try:
-            llm = OpenAIClient(profile="triage")
-            healthy = await llm.health_check()
-            if healthy:
-                console.print("[green]OK[/green]")
-            else:
-                console.print("[red]FAIL[/red]")
+            try:
+                from src.shared.llm.openai_client import OpenAIClient
+            except ImportError:
+                console.print("[yellow]SKIP[/yellow] (install with: uv sync --extra main)")
+                OpenAIClient = None  # type: ignore[assignment]
+
+            if OpenAIClient is not None:
+                llm = OpenAIClient(profile="triage")
+                healthy = await llm.health_check()
+                if healthy:
+                    console.print("[green]OK[/green]")
+                else:
+                    console.print("[red]FAIL[/red]")
         except Exception as e:
             console.print(f"[red]ERROR: {e}[/red]")
 
