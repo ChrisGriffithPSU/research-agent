@@ -10,8 +10,6 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Protocol
 
-from openai import AsyncOpenAI
-
 from src.shared.exceptions.llm import LLMError, LLMProviderError
 
 
@@ -24,11 +22,13 @@ class LLMResponse:
         model: str,
         usage: Optional[Dict[str, int]] = None,
         latency_ms: Optional[float] = None,
+        reasoning_details: Optional[Any] = None,
     ):
         self.content = content
         self.model = model
         self.usage = usage or {}
         self.latency_ms = latency_ms
+        self.reasoning_details = reasoning_details
 
     def __repr__(self) -> str:
         return (
@@ -127,6 +127,8 @@ class OpenAIClient:
                 )
             raise LLMError("CUSTOM_LLM_API_KEY environment variable not set")
 
+        from openai import AsyncOpenAI
+
         self._client = AsyncOpenAI(
             base_url=self.base_url,
             api_key=self.api_key,
@@ -193,6 +195,20 @@ class OpenAIClient:
                 "temperature": temperature,
             }
 
+            extra_body = kwargs.pop("extra_body", None)
+            extra_body = dict(extra_body or {})
+            reasoning = extra_body.get("reasoning")
+
+            if isinstance(reasoning, dict):
+                reasoning_with_default = dict(reasoning)
+                reasoning_with_default["enabled"] = True
+                extra_body["reasoning"] = reasoning_with_default
+            else:
+                extra_body["reasoning"] = {"enabled": True}
+
+            if extra_body is not None:
+                params["extra_body"] = extra_body
+
             if max_tokens is not None:
                 params["max_tokens"] = max_tokens
 
@@ -206,18 +222,22 @@ class OpenAIClient:
             latency_ms = (time.time() - start_time) * 1000
 
             content = response.choices[0].message.content or ""
+            reasoning_details = getattr(response.choices[0].message, "reasoning_details", None)
 
-            usage = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
-            }
+            usage: Dict[str, int] = {}
+            if response.usage is not None:
+                usage = {
+                    "prompt_tokens": response.usage.prompt_tokens,
+                    "completion_tokens": response.usage.completion_tokens,
+                    "total_tokens": response.usage.total_tokens,
+                }
 
             return LLMResponse(
                 content=content,
                 model=self.model,
                 usage=usage,
                 latency_ms=latency_ms,
+                reasoning_details=reasoning_details,
             )
 
         except Exception as e:

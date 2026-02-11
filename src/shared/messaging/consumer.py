@@ -5,6 +5,7 @@ import functools
 import json
 import logging
 import time
+import traceback
 from typing import Any, Callable, Dict, Optional
 
 import aio_pika
@@ -222,6 +223,8 @@ class MessageConsumer:
         ):
             # Start timer
             start_time = time.time()
+            validated_message: Any = None
+            data: Optional[dict] = None
 
             try:
                 # Deserialize message
@@ -257,10 +260,15 @@ class MessageConsumer:
                 await self._handle_permanent_error(message, queue_name, "permanent_error", e)
 
             except TemporaryError as e:
-                # Transient error - nack with requeue
-                logger.warning(f"Temporary error processing message from {queue_name}: {e}")
-                await message.nack(requeue=True)
-                self._metrics.record_message_nacked(queue_name, requeued=True)
+                # Transient error - retry with bounded attempts
+                await self._handle_retryable_error(
+                    message=message,
+                    queue_name=queue_name,
+                    error_type="temporary_error",
+                    error=e,
+                    validated_message=validated_message,
+                    data=data,
+                )
 
             except aio_pika.exceptions.ChannelClosed as e:
                 # Channel closed by broker - classify by reply code
@@ -275,10 +283,15 @@ class MessageConsumer:
                 self._metrics.record_dlq_message(queue_name, "connection_closed")
 
             except Exception as e:
-                # Unknown error - treat as transient, requeue
-                logger.warning(f"Unknown error processing message from {queue_name}: {e}")
-                await message.nack(requeue=True)
-                self._metrics.record_message_nacked(queue_name, requeued=True)
+                # Unknown error - retry with bounded attempts
+                await self._handle_retryable_error(
+                    message=message,
+                    queue_name=queue_name,
+                    error_type="unknown_error",
+                    error=e,
+                    validated_message=validated_message,
+                    data=data,
+                )
 
         return callback
 
@@ -297,8 +310,8 @@ class MessageConsumer:
             queue_name: Queue name
             start_time: Start timestamp
         """
-        correlation_id = message.correlation_id
-        logger.info(f"Processing message {correlation_id} from {queue_name}")
+        message_id = self._message_identifier(message)
+        logger.info(f"Processing message {message_id} from {queue_name}")
 
         try:
             result = handler(message)
@@ -309,6 +322,97 @@ class MessageConsumer:
         except Exception as e:
             # Handler exception - will be caught by callback
             raise
+
+    async def _handle_retryable_error(
+        self,
+        message: aio_pika.IncomingMessage,
+        queue_name: str,
+        error_type: str,
+        error: Exception,
+        validated_message: Any,
+        data: Optional[dict],
+    ) -> None:
+        """Handle retryable errors with bounded retries.
+
+        Retry policy:
+        - If message exposes `attempt` and `max_attempts`, republish with incremented attempt.
+        - Stop retrying when attempt budget is exhausted and route to DLQ (`nack(requeue=False)`).
+        - If retry metadata is unavailable, allow one broker requeue using redelivery flag.
+        """
+        logger.warning(
+            f"{error_type} processing message from {queue_name}: {error}\n"
+            f"{traceback.format_exc()}"
+        )
+
+        current_attempt = getattr(validated_message, "attempt", None)
+        max_attempts = getattr(validated_message, "max_attempts", None)
+
+        if isinstance(current_attempt, int) and isinstance(max_attempts, int):
+            next_attempt = current_attempt + 1
+
+            if next_attempt >= max_attempts:
+                logger.error(
+                    f"Dropping message from {queue_name} after {next_attempt}/{max_attempts} attempts"
+                )
+                await message.nack(requeue=False)
+                self._metrics.record_message_nacked(queue_name, requeued=False)
+                self._metrics.record_dlq_message(queue_name, f"{error_type}_max_attempts_exceeded")
+                return
+
+            if data is None:
+                # Should not happen after successful deserialize, but keep safe fallback.
+                await message.nack(requeue=True)
+                self._metrics.record_message_nacked(queue_name, requeued=True)
+                return
+
+            retry_payload = dict(data)
+            retry_payload["attempt"] = next_attempt
+
+            channel = self._connection.channel
+            exchange = await channel.declare_exchange(name="researcher", passive=True)
+            await exchange.publish(
+                aio_pika.Message(
+                    body=json.dumps(retry_payload).encode("utf-8"),
+                    content_type="application/json",
+                    headers=dict(message.headers or {}),
+                ),
+                routing_key=queue_name,
+            )
+
+            # Ack original only after successful republish to avoid message loss.
+            await message.ack()
+            self._metrics.record_message_acked(queue_name)
+            self._metrics.record_message_nacked(queue_name, requeued=True)
+            return
+
+        # Fallback for messages without retry metadata:
+        # avoid infinite loops by allowing at most one broker-level redelivery.
+        if not message.redelivered:
+            await message.nack(requeue=True)
+            self._metrics.record_message_nacked(queue_name, requeued=True)
+            return
+
+        logger.error(f"Dropping repeatedly failing message from {queue_name} (no retry metadata)")
+        await message.nack(requeue=False)
+        self._metrics.record_message_nacked(queue_name, requeued=False)
+        self._metrics.record_dlq_message(queue_name, f"{error_type}_repeated_redelivery")
+
+    @staticmethod
+    def _message_identifier(message: Any) -> str:
+        """Get the best available message identifier for logs."""
+        correlation = getattr(message, "correlation_id", None)
+        if correlation:
+            return str(correlation)
+
+        work_id = getattr(message, "work_id", None)
+        if work_id:
+            return str(work_id)
+
+        paper_id = getattr(message, "paper_id", None)
+        if paper_id:
+            return str(paper_id)
+
+        return "unknown"
 
     async def _handle_permanent_error(
         self,
@@ -459,7 +563,7 @@ def message_handler(
 
             logger.info(
                 f"Handler started: {handler_func.__name__} "
-                f"(correlation_id={message.correlation_id})"
+                f"(message_id={MessageConsumer._message_identifier(message)})"
             )
 
             try:

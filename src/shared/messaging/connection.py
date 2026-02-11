@@ -115,7 +115,7 @@ class RabbitMQConnection:
 
         try:
             # Wait for connection close event
-            await self._connection.closed
+            await self._connection.closed()
 
             if self._is_connected:
                 logger.warning("RabbitMQ connection closed unexpectedly")
@@ -421,4 +421,3 @@ async def disconnect() -> None:
             await _global_connection.close()
             _global_connection = None
             logger.info("Global RabbitMQ connection closed")
-

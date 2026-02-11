@@ -12,6 +12,11 @@ from docling.document_converter import DocumentConverter
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
 
+try:
+    from docling.document_converter import PdfFormatOption
+except ImportError:  # pragma: no cover
+    PdfFormatOption = None  # type: ignore[assignment]
+
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
 from src.services.fetchers.arxiv.schemas.paper import ParsedContent
 
@@ -54,15 +59,23 @@ class PDFProcessor:
 
         # Configure docling for comprehensive extraction
         pipeline_options = PdfPipelineOptions()
-        pipeline_options.do_ocr = True  # Extract text from scanned PDFs
-        pipeline_options.do_table_structure = True  # Extract tables
-        pipeline_options.table_structure_options.do_cell_matching = True
+        pipeline_options.do_ocr = self.config.pdf_do_ocr
+        pipeline_options.do_table_structure = self.config.pdf_do_table_structure
+        if self.config.pdf_do_table_structure:
+            pipeline_options.table_structure_options.do_cell_matching = self.config.pdf_do_cell_matching
 
-        self.converter = DocumentConverter(
-            format_options={
-                InputFormat.PDF: pipeline_options,
-            }
-        )
+        if PdfFormatOption is not None:
+            self.converter = DocumentConverter(
+                format_options={
+                    InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options),
+                }
+            )
+        else:
+            self.converter = DocumentConverter(
+                format_options={
+                    InputFormat.PDF: pipeline_options,
+                }
+            )
 
         # Statistics
         self._processed_count = 0
@@ -171,11 +184,13 @@ class PDFProcessor:
         equations = self._extract_equations(text_content)
 
         # Extract metadata
+        pages = doc_dict.get("pages", {})
+        page_count = len(pages) if isinstance(pages, dict) else 0
         metadata = {
-            "num_pages": doc_dict.get("meta", {}).get("pages", 0),
+            "num_pages": page_count,
             "file_size": doc_dict.get("meta", {}).get("file_size", 0),
             "ocr_used": doc_dict.get("meta", {}).get("ocr", False),
-            "docling_version": doc_dict.get("meta", {}).get("version", "unknown"),
+            "docling_version": doc_dict.get("version", "unknown"),
         }
 
         return ParsedContent(
@@ -201,6 +216,17 @@ class PDFProcessor:
         # Try different docling output formats
         if "text" in doc_dict:
             return doc_dict["text"]
+
+        # docling-core structure exposes extracted text blocks in "texts"
+        if "texts" in doc_dict and isinstance(doc_dict["texts"], list):
+            for item in doc_dict["texts"]:
+                if not isinstance(item, dict):
+                    continue
+                text = item.get("text") or item.get("orig")
+                if isinstance(text, str) and text.strip():
+                    text_parts.append(text.strip())
+            if text_parts:
+                return "\n\n".join(text_parts)
 
         # Newer docling versions use "body"
         if "body" in doc_dict:

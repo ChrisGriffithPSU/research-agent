@@ -1,18 +1,12 @@
-"""LLM client library for multi-provider support."""
+"""LLM client exports.
 
-from .base import BaseLLMClient, LLMProvider, LLMResponse
-from .anthropic_client import AnthropicClient
-from .openai_client import OpenAIClient
-from .ollama_client import OllamaClient
-from .router import LLMRouter, TaskType
+This package currently ships a single OpenAI-compatible client.
+"""
+
+from .openai_client import OpenAIClient, ILLMClient, LLMResponse
 
 __all__ = [
-    "BaseLLMClient",
-    "LLMProvider",
-    "LLMResponse",
-    "AnthropicClient",
     "OpenAIClient",
-    "OllamaClient",
-    "LLMRouter",
-    "TaskType",
+    "ILLMClient",
+    "LLMResponse",
 ]

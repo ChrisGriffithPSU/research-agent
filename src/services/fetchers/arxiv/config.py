@@ -114,6 +114,18 @@ class ArxivFetcherConfig(BaseModel):
         default=100,
         description="Skip PDFs larger than this size"
     )
+    pdf_do_ocr: bool = Field(
+        default=True,
+        description="Enable OCR pass during PDF parsing (high CPU/RAM)"
+    )
+    pdf_do_table_structure: bool = Field(
+        default=True,
+        description="Enable table structure extraction (high CPU/RAM)"
+    )
+    pdf_do_cell_matching: bool = Field(
+        default=True,
+        description="Enable table cell matching when table extraction is on"
+    )
     
     # ==================== Caching ====================
     cache_enabled: bool = Field(
@@ -256,4 +268,3 @@ def load_config_from_file(config_path: Path) -> ArxivFetcherConfig:
     with open(config_path, 'r') as f:
         config_dict = yaml.safe_load(f)
     return ArxivFetcherConfig(**config_dict)
-
