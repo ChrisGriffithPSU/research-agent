@@ -54,11 +54,12 @@ async def test_triage_to_experiment_plan_flow(tmp_path: Path) -> None:
         categories=["cs.LG"],
         arxiv_url="https://arxiv.org/abs/p1",
         pdf_url="https://arxiv.org/pdf/p1.pdf",
+        submitted_date=None,
     )
     await triage_worker.process(triage_request)
     fulltext_payload = next(
         p["message"]
-        for p in triage_worker.publisher.published
+        for p in triage_worker.publisher.published  # type: ignore[attr-defined]
         if p["routing_key"] == "paper.fulltext.request"  # type: ignore[attr-defined]
     )
 
@@ -80,7 +81,7 @@ async def test_triage_to_experiment_plan_flow(tmp_path: Path) -> None:
     await parser_worker.process(FullTextRequest.model_validate(fulltext_payload))
     concept_req_payload = next(
         p["message"]
-        for p in parser_worker.publisher.published
+        for p in parser_worker.publisher.published  # type: ignore[attr-defined]
         if p["routing_key"] == "paper.concepts.request"  # type: ignore[attr-defined]
     )
 
@@ -122,8 +123,23 @@ async def test_triage_to_experiment_plan_flow(tmp_path: Path) -> None:
             json.dumps(
                 {
                     "batch_id": "b1",
-                    "experiment_packages": [{"id": "e1"}],
-                    "meta": {"produced_total_experiments": 1},
+                    "experiment_packages": [
+                        {
+                            "concept_id": "c1",
+                            "concept_name": "Regime",
+                            "invariant_restatement": "restatement",
+                            "manifestation_space": [],
+                            "hypotheses": [],
+                            "discriminating_test_matrix": [],
+                            "batches": [],
+                            "experiments": [],
+                        }
+                    ],
+                    "meta": {
+                        "max_experiments_per_concept": 5,
+                        "max_total_experiments": 20,
+                        "produced_total_experiments": 1,
+                    },
                 }
             )
         ),  # type: ignore[arg-type]

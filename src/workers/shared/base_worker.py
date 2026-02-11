@@ -160,6 +160,17 @@ class BaseWorker(ABC):
         """
         return await self.artifact_store.store(key, data, content_type)
 
+    async def delete_artifact(self, key: str) -> bool:
+        """Delete an artifact.
+
+        Args:
+            key: Artifact key/path
+
+        Returns:
+            True if deleted, False if not found
+        """
+        return await self.artifact_store.delete(key)
+
     def is_running(self) -> bool:
         """Check if worker is running."""
         return self._running

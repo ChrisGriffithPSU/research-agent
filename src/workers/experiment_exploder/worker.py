@@ -21,6 +21,8 @@ from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.publisher import MessagePublisher
 from src.shared.storage.artifact_store import LocalArtifactStore
 
+from src.workers.experiment_exploder.plan_schema import coerce_plan
+
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +127,15 @@ class ExperimentExploderWorker(BaseWorker):
         # Generate experiment plan
         plan_data = await self._generate_plan(llm_input)
 
+        # Best-effort shape validation (do not fail the worker on schema drift)
+        plan_model = coerce_plan(plan_data)
+        if plan_model is None:
+            logger.warning("Experiment plan did not validate against expected schema")
+
+        produced_total = plan_data.get("meta", {}).get("produced_total_experiments")
+        if not isinstance(produced_total, int):
+            produced_total = plan_model.inferred_experiment_count() if plan_model else 0
+
         # Store plan.json artifact
         plan_json = json.dumps(plan_data, indent=2)
         artifact_key = f"{message.paper_id}/plan/plan.json"
@@ -138,15 +149,17 @@ class ExperimentExploderWorker(BaseWorker):
         notification = NotificationRequest(
             work_id=message.work_id,
             parent_work_id=message.parent_work_id,
+            experiment_id=None,
             paper_id=message.paper_id,
             status="INFO",
             title=f"Experiment Plan Generated for {message.paper_id}",
             message=(
                 f"Generated experiment plan with "
-                f"{plan_data.get('meta', {}).get('produced_total_experiments', 0)} "
+                f"{produced_total} "
                 f"experiments from {len(message.concept_objects)} concepts"
             ),
             artifact_refs=[artifact_path, message.concepts_json_path],
+            recommendation=None,
         )
 
         await self.publish("notify.send", notification)
@@ -158,7 +171,7 @@ class ExperimentExploderWorker(BaseWorker):
             paper_id=message.paper_id,
             plan_json_path=artifact_path,
             batch_id=plan_data.get("batch_id"),
-            experiment_count=plan_data.get("meta", {}).get("produced_total_experiments", 0),
+            experiment_count=produced_total,
         )
         await self.publish("plan.generated", plan_generated)
 
@@ -234,6 +247,9 @@ class ExperimentExploderWorker(BaseWorker):
                 "batch_id": "error",
                 "experiment_packages": [],
                 "meta": {
+                    "max_experiments_per_concept": self.max_experiments_per_concept,
+                    "max_total_experiments": self.max_total_experiments,
+                    "produced_total_experiments": 0,
                     "error": f"Parse error: {str(e)}",
                 },
             }

@@ -17,8 +17,23 @@ def _plan_payload() -> str:
     return json.dumps(
         {
             "batch_id": "b1",
-            "experiment_packages": [{"id": "e1"}],
-            "meta": {"produced_total_experiments": 1},
+            "experiment_packages": [
+                {
+                    "concept_id": "c1",
+                    "concept_name": "name",
+                    "invariant_restatement": "restatement",
+                    "manifestation_space": [],
+                    "hypotheses": [],
+                    "discriminating_test_matrix": [],
+                    "batches": [],
+                    "experiments": [],
+                }
+            ],
+            "meta": {
+                "max_experiments_per_concept": 5,
+                "max_total_experiments": 20,
+                "produced_total_experiments": 1,
+            },
         }
     )
 
