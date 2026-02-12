@@ -36,6 +36,30 @@ REJECT_PAPER_ID = "1505.04597"
 _REEXEC_GUARD_ENV = "TRIAGE_TEST_ARXIV_BOOTSTRAPPED"
 
 
+def load_dotenv_file() -> None:
+    """Load .env from project root for local script runs."""
+    dotenv_path = project_root / ".env"
+    if not dotenv_path.exists():
+        return
+
+    for raw_line in dotenv_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if not key:
+            continue
+
+        if value.startswith(("'", '"')) and value.endswith(("'", '"')) and len(value) >= 2:
+            value = value[1:-1]
+
+        os.environ.setdefault(key, value)
+
+
 def print_header(title: str) -> None:
     print("\n" + "=" * 70)
     print(f"  {title}")
@@ -223,6 +247,37 @@ async def wait_for_queue_count(connection, queue_name: str, minimum: int, timeou
     return False
 
 
+async def collect_queue_messages(
+    connection,
+    queue_name: str,
+    timeout_seconds: int,
+    stop_when: callable | None = None,
+) -> list[dict]:
+    """Collect messages from a queue until timeout or stop condition.
+
+    This reads concrete payloads (not queue depth) to avoid race conditions with
+    long-running handlers where queue stats can be misleading.
+    """
+    deadline = asyncio.get_running_loop().time() + timeout_seconds
+    queue = await connection.channel.declare_queue(name=queue_name, passive=True)
+    out: list[dict] = []
+
+    while asyncio.get_running_loop().time() < deadline:
+        msg = await queue.get(timeout=1, fail=False)
+        if msg is None:
+            await asyncio.sleep(0.25)
+            continue
+
+        payload = json.loads(msg.body.decode("utf-8"))
+        out.append(payload)
+        await msg.ack()
+
+        if stop_when is not None and stop_when(out):
+            break
+
+    return out
+
+
 async def purge_queue(connection, queue_name: str) -> None:
     queue = await connection.channel.declare_queue(name=queue_name, passive=True)
     await queue.purge()
@@ -337,18 +392,23 @@ async def run_test() -> int:
             await publisher.publish(message=request, routing_key="paper.triage.request")
             print_info(f"Published triage request for {paper_id}")
 
-        got_decisions = await wait_for_queue_count(
+        expected_decision_ids = {PASS_PAPER_ID, REJECT_PAPER_ID}
+        print_step("Waiting for concrete triage decisions")
+        decisions_payload = await collect_queue_messages(
             connection=connection,
             queue_name="paper.triage.decision",
-            minimum=2,
-            timeout_seconds=240,
+            timeout_seconds=300,
+            stop_when=lambda items: {
+                item.get("paper_id") for item in items if item.get("paper_id")
+            }.issuperset(expected_decision_ids),
         )
-        if not got_decisions:
-            print_error("Timed out waiting for triage decisions")
+
+        decisions_by_id = {x["paper_id"]: x["decision"] for x in decisions_payload if "paper_id" in x}
+        if not expected_decision_ids.issubset(decisions_by_id.keys()):
+            missing = sorted(expected_decision_ids.difference(decisions_by_id.keys()))
+            print_error(f"Timed out waiting for triage decisions for: {missing}")
             return 1
 
-        decisions_payload = await drain_queue_json(connection, "paper.triage.decision")
-        decisions_by_id = {x["paper_id"]: x["decision"] for x in decisions_payload if "paper_id" in x}
         print_info(f"Decisions: {decisions_by_id}")
 
         if decisions_by_id.get(REJECT_PAPER_ID) != "REJECT_PAPER":
@@ -375,17 +435,17 @@ async def run_test() -> int:
 
         expected_parsed = 1 if decisions_by_id.get(PASS_PAPER_ID) == "REQUEST_FULL_TEXT" else 0
         if expected_parsed > 0:
-            got_parsed = await wait_for_queue_count(
+            parsed_payload = await collect_queue_messages(
                 connection=connection,
                 queue_name="paper.parsed",
-                minimum=expected_parsed,
                 timeout_seconds=420,
+                stop_when=lambda items: len(items) >= expected_parsed,
             )
-            if not got_parsed:
+            if len(parsed_payload) < expected_parsed:
                 print_error("Timed out waiting for parser output")
                 return 1
-
-        parsed_payload = await drain_queue_json(connection, "paper.parsed")
+        else:
+            parsed_payload = await drain_queue_json(connection, "paper.parsed")
         parsed_ids = [x.get("paper_id") for x in parsed_payload if x.get("paper_id")]
         print_info(f"Parsed IDs: {parsed_ids}")
 
@@ -443,5 +503,6 @@ async def main() -> int:
 
 
 if __name__ == "__main__":
+    load_dotenv_file()
     ensure_arxiv_venv_python()
     sys.exit(asyncio.run(main()))

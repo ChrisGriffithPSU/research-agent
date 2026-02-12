@@ -7,6 +7,7 @@ base URL, API key, and model name via environment variables.
 import os
 import re
 import time
+import json
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional, Protocol
 
@@ -221,8 +222,9 @@ class OpenAIClient:
 
             latency_ms = (time.time() - start_time) * 1000
 
-            content = response.choices[0].message.content or ""
-            reasoning_details = getattr(response.choices[0].message, "reasoning_details", None)
+            message = response.choices[0].message
+            content = self._extract_message_content(message)
+            reasoning_details = getattr(message, "reasoning_details", None)
 
             usage: Dict[str, int] = {}
             if response.usage is not None:
@@ -247,6 +249,37 @@ class OpenAIClient:
                 model=self.model,
                 original_error=e,
             ) from e
+
+    @staticmethod
+    def _extract_message_content(message: Any) -> str:
+        """Extract text content from OpenAI-compatible message payloads."""
+        content = getattr(message, "content", "")
+
+        if isinstance(content, str):
+            return content
+
+        if isinstance(content, list):
+            text_parts: List[str] = []
+            for part in content:
+                if isinstance(part, str):
+                    text_parts.append(part)
+                    continue
+                if isinstance(part, dict):
+                    text = part.get("text")
+                    if isinstance(text, str):
+                        text_parts.append(text)
+            return "\n".join(p for p in text_parts if p)
+
+        if content is None:
+            refusal = getattr(message, "refusal", None)
+            if isinstance(refusal, str) and refusal:
+                return refusal
+            return ""
+
+        try:
+            return json.dumps(content)
+        except Exception:
+            return str(content)
 
     async def health_check(self) -> bool:
         """Check if LLM service is accessible.

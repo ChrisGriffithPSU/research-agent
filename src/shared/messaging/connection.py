@@ -103,6 +103,12 @@ class RabbitMQConnection:
         # Close connection
         if self._connection and not self._connection.is_closed:
             await self._connection.close()
+            try:
+                # Ensure transport shutdown callbacks complete before loop exits.
+                await asyncio.wait_for(self._connection.closed(), timeout=5)
+            except Exception:
+                # Best effort only; connection is already in closing/closed state.
+                pass
             logger.debug("RabbitMQ connection closed")
 
         self._is_connected = False
