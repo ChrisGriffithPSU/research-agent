@@ -1,4 +1,5 @@
 """RabbitMQ connection management."""
+
 import asyncio
 import logging
 from typing import Optional
@@ -42,9 +43,7 @@ class RabbitMQConnection:
             logger.debug("Already connected to RabbitMQ")
             return
 
-        logger.info(
-            f"Connecting to RabbitMQ at {self._config.host}:{self._config.port}..."
-        )
+        logger.info(f"Connecting to RabbitMQ at {self._config.host}:{self._config.port}...")
 
         try:
             url = self._config.connection_url
@@ -58,14 +57,10 @@ class RabbitMQConnection:
             self._channel = await self._connection.channel()
             self._is_connected = True
 
-            logger.info(
-                f"Connected to RabbitMQ at {self._config.host}:{self._config.port}"
-            )
+            logger.info(f"Connected to RabbitMQ at {self._config.host}:{self._config.port}")
 
             # Start reconnection task (aio-pika handles auto-reconnect)
-            self._reconnect_task = asyncio.create_task(
-                self._monitor_connection()
-            )
+            self._reconnect_task = asyncio.create_task(self._monitor_connection())
 
         except Exception as e:
             logger.error(f"Failed to connect to RabbitMQ: {e}")
@@ -159,9 +154,7 @@ class RabbitMQConnection:
             ChannelError: If confirm mode cannot be enabled
         """
         if not self._is_connected or self._channel is None:
-            raise ConnectionError(
-                "Not connected to RabbitMQ. Call connect() first."
-            )
+            raise ConnectionError("Not connected to RabbitMQ. Call connect() first.")
 
         if self._channel.is_closed:
             raise ConnectionError("Channel is closed")
@@ -172,6 +165,7 @@ class RabbitMQConnection:
         except Exception as e:
             logger.error(f"Failed to enable publisher confirms: {e}")
             from src.shared.messaging.exceptions import ChannelError
+
             raise ChannelError(
                 "Failed to enable publisher confirms",
                 original=e,
@@ -192,9 +186,7 @@ class RabbitMQConnection:
             ConnectionError: If not connected
         """
         if not self._is_connected or self._channel is None:
-            raise ConnectionError(
-                "Not connected to RabbitMQ. Call connect() first."
-            )
+            raise ConnectionError("Not connected to RabbitMQ. Call connect() first.")
         return ChannelTransaction(self._channel)
 
     @property
@@ -205,9 +197,7 @@ class RabbitMQConnection:
             ConnectionError: If not connected
         """
         if not self._is_connected or self._channel is None:
-            raise ConnectionError(
-                "Not connected to RabbitMQ. Call connect() first."
-            )
+            raise ConnectionError("Not connected to RabbitMQ. Call connect() first.")
 
         if self._channel.is_closed:
             raise ConnectionError("Channel is closed")
@@ -246,14 +236,6 @@ class RabbitMQConnection:
                 logger.warning(f"Unexpected queue info structure for {queue_name}")
                 return None
 
-        except aio_pika.exceptions.ChannelClosed as e:
-            if e.reply_code == 404:  # NOT_FOUND
-                logger.debug(f"Queue {queue_name} does not exist")
-                return None
-            raise
-        except Exception as e:
-            logger.error(f"Error getting queue info for {queue_name}: {e}")
-            raise
         except aio_pika.exceptions.ChannelClosed as e:
             if e.reply_code == 404:  # NOT_FOUND
                 logger.debug(f"Queue {queue_name} does not exist")
@@ -352,6 +334,7 @@ class ChannelTransaction:
             logger.error(f"Failed to commit transaction: {e}")
             self._in_transaction = False
             from src.shared.messaging.exceptions import ChannelError
+
             raise ChannelError(
                 "Failed to commit transaction",
                 original=e,
@@ -377,6 +360,7 @@ class ChannelTransaction:
             logger.error(f"Failed to rollback transaction: {e}")
             self._in_transaction = False
             from src.shared.messaging.exceptions import ChannelError
+
             raise ChannelError(
                 "Failed to rollback transaction",
                 original=e,
@@ -406,6 +390,7 @@ async def get_connection(config: MessagingConfig | None = None) -> RabbitMQConne
         if _global_connection is None:
             if config is None:
                 from src.shared.messaging.config import messaging_config
+
                 config = messaging_config
 
             _global_connection = RabbitMQConnection(config)

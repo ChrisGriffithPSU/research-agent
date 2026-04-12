@@ -60,7 +60,6 @@ dev-dependencies = [
     "aiosqlite>=0.20.0",
     "ruff>=0.1.9",
     "mypy>=1.8.0",
-    "black>=23.12.0",
 ]
 
 # Ruff configuration (linting & formatting)
@@ -91,12 +90,6 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
 "tests/*" = ["T20"]  # Allow print in tests
-
-# Black configuration (code formatting)
-[tool.black]
-line-length = 100
-target-version = ['py313']
-include = '\.pyi?$'
 
 # Pytest configuration
 [tool.pytest.ini_options]

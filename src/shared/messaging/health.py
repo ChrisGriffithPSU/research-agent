@@ -1,7 +1,8 @@
 """Health check functionality for messaging."""
+
 import logging
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
 from src.shared.messaging.connection import RabbitMQConnection
 from src.shared.messaging.metrics import get_metrics
@@ -18,7 +19,7 @@ class HealthStatus:
         status: Literal["healthy", "unhealthy", "degraded"],
         timestamp: datetime,
         checks: dict[str, str],
-        metrics: dict[str, any],
+        metrics: dict[str, Any],
     ):
         """Initialize health status.
 
@@ -90,6 +91,7 @@ async def check_messaging_health(
 
             # Check for degraded state (>80% capacity)
             from src.shared.messaging.config import messaging_config
+
             warning_threshold = messaging_config.queue_max_length * 0.8
 
             for queue_name, depth in queue_depths.items():
@@ -181,4 +183,3 @@ async def quick_check(connection: RabbitMQConnection) -> bool:
     except Exception:
         logger.debug("Quick messaging health check: failed")
         return False
-

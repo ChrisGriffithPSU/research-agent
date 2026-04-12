@@ -1,12 +1,15 @@
 """Configuration for arXiv fetcher plugin.
 
+Categories are sourced from the canonical list in the worker config:
+    src.workers.arxiv_fetcher.config.HARDCODED_CATEGORIES
+
 All parameters are easily configurable with sensible defaults.
 Integrates with existing config patterns from src/shared/utils/config/
 """
 
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ArxivFetcherConfig(BaseModel):
@@ -47,10 +50,14 @@ class ArxivFetcherConfig(BaseModel):
         log_level: Logging level
     """
 
+    model_config = ConfigDict()
+
     # ==================== Categories ====================
+    # NOTE: The canonical category list lives in
+    #   src/workers/arxiv_fetcher/config.py :: HARDCODED_CATEGORIES
+    # This default is kept for standalone use of this services config only.
     categories: list[str] = Field(
         default=[
-            # Quantitative Finance
             "q-fin.TR",
             "q-fin.CP",
             "q-fin.GN",
@@ -58,7 +65,6 @@ class ArxivFetcherConfig(BaseModel):
             "q-fin.PM",
             "q-fin.ST",
             "q-fin.RM",
-            # Machine Learning & AI
             "cs.LG",
             "cs.AI",
             "cs.TF",
@@ -72,7 +78,6 @@ class ArxivFetcherConfig(BaseModel):
             "cs.SI",
             "cs.DS",
             "cs.PF",
-            # Statistics & Statistical Learning
             "stat.ML",
             "stat.TH",
             "stat.ME",
@@ -80,50 +85,41 @@ class ArxivFetcherConfig(BaseModel):
             "stat.AP",
             "math.ST",
             "math.PR",
-            # Optimization, Control & Signal Processing
             "math.OC",
             "math.CT",
             "eess.SY",
             "eess.SP",
-            # Dynamical Systems & Nonlinear Science
             "math.DS",
             "nlin.AO",
             "nlin.CD",
             "nlin.CG",
             "nlin.PS",
             "nlin.SI",
-            # Statistical Physics & Complex Systems
             "cond-mat.stat-mech",
             "cond-mat.dis-nn",
             "cond-mat.soft",
             "cond-mat.mtrl-sci",
-            # Physics (cascade/regime/fluid/earthquake analogies)
             "physics.soc-ph",
             "physics.data-an",
             "physics.flu-dyn",
             "physics.geo-ph",
-            # Information Theory
             "math.IT",
-            # Geometry & Topology
             "math.MG",
             "math.AT",
             "math.NA",
-            # Economics (game theory, econometrics)
             "econ.GN",
             "econ.TH",
             "econ.EM",
-            # Quantitative Biology (neuro/eco/epidemic analogies)
             "q-bio.NC",
             "q-bio.QM",
             "q-bio.PE",
             "q-bio.OT",
-            # Networking & Distributed (queueing analogies)
             "cs.NI",
             "cs.DC",
             "cs.NA",
             "cs.MS",
         ],
-        description="arXiv categories to monitor (all ML, finance, math relevant)",
+        description="arXiv categories to monitor (canonical list in worker config)",
     )
 
     # ==================== Queues ====================
@@ -218,9 +214,6 @@ class ArxivFetcherConfig(BaseModel):
     metrics_enabled: bool = Field(default=True, description="Enable metrics collection")
     tracing_enabled: bool = Field(default=True, description="Enable distributed tracing")
     log_level: str = Field(default="INFO", description="Logging level")
-
-    class Config:
-        json_encoders = {Path: lambda v: str(v)}
 
 
 # Global config instance

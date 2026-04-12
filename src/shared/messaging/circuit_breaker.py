@@ -5,7 +5,8 @@ from src.shared.utils.circuit_breaker for backwards compatibility.
 
 For new code, import directly from src.shared.utils.circuit_breaker.
 """
-import logging
+
+import warnings
 
 from src.shared.utils.circuit_breaker import (
     CircuitBreaker,
@@ -13,11 +14,11 @@ from src.shared.utils.circuit_breaker import (
     circuit_breaker,
 )
 
-logger = logging.getLogger(__name__)
-
-logger.warning(
+warnings.warn(
     "src.shared.messaging.circuit_breaker is deprecated. "
-    "Use src.shared.utils.circuit_breaker instead."
+    "Use src.shared.utils.circuit_breaker instead.",
+    DeprecationWarning,
+    stacklevel=2,
 )
 
 __all__ = ["CircuitBreaker", "CircuitState", "circuit_breaker"]

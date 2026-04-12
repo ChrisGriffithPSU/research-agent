@@ -2,22 +2,23 @@
 
 Defines data structures for paper metadata and parsed content.
 """
-from datetime import datetime
+
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PaperSource(str, Enum):
     """Source of paper discovery."""
+
     QUERY = "query"
     CATEGORY = "category"
 
 
 class PaperMetadata(BaseModel):
     """Immutable paper metadata from arXiv.
-    
+
     Attributes:
         paper_id: arXiv ID (e.g., '2401.12345')
         version: Version string (e.g., 'v1', 'v2')
@@ -37,6 +38,9 @@ class PaperMetadata(BaseModel):
         source_query: Query that found this paper (if applicable)
         relevance_score: Optional relevance score from intelligence layer
     """
+
+    model_config = ConfigDict()
+
     paper_id: str = Field(..., description="arXiv ID (e.g., '2401.12345')")
     version: str = Field(default="v1", description="Version (v1, v2, etc.)")
     title: str = Field(..., description="Paper title")
@@ -44,11 +48,11 @@ class PaperMetadata(BaseModel):
     authors: list[str] = Field(default_factory=list, description="Author names")
     categories: list[str] = Field(
         default_factory=list,
-        description="Primary categories (e.g., ['cs.LG', 'stat.ML'])"
+        description="Primary categories (e.g., ['cs.LG', 'stat.ML'])",
     )
     subcategories: list[str] = Field(
         default_factory=list,
-        description="All subcategories paper appears in"
+        description="All subcategories paper appears in",
     )
     submitted_date: str = Field(default="", description="Original submission date")
     updated_date: str | None = Field(None, description="Last update date")
@@ -59,14 +63,14 @@ class PaperMetadata(BaseModel):
     arxiv_url: str = Field(default="", description="URL to arXiv abstract page")
     source: PaperSource = Field(
         default=PaperSource.QUERY,
-        description="How the paper was discovered"
+        description="How the paper was discovered",
     )
     source_query: str = Field(default="", description="Query that found this paper")
     relevance_score: float | None = Field(
         None,
         ge=0.0,
         le=1.0,
-        description="LLM-assigned relevance score"
+        description="LLM-assigned relevance score",
     )
 
     def __hash__(self):
@@ -79,15 +83,10 @@ class PaperMetadata(BaseModel):
             return self.paper_id == other.paper_id
         return False
 
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-
 
 class ParsedContent(BaseModel):
     """Extracted content from PDF.
-    
+
     Attributes:
         paper_id: arXiv ID this content belongs to
         text_content: Full text extracted from PDF
@@ -96,110 +95,24 @@ class ParsedContent(BaseModel):
         figure_captions: Figure captions and their IDs
         metadata: Additional extraction metadata
     """
+
+    model_config = ConfigDict()
+
     paper_id: str = Field(..., description="arXiv ID this content belongs to")
     text_content: str = Field(default="", description="Full text extracted from PDF")
     tables: list[dict[str, Any]] = Field(
         default_factory=list,
-        description="Extracted tables with captions and data"
+        description="Extracted tables with captions and data",
     )
     equations: list[str] = Field(
         default_factory=list,
-        description="LaTeX equations found in the PDF"
+        description="LaTeX equations found in the PDF",
     )
     figure_captions: list[dict[str, str]] = Field(
         default_factory=list,
-        description="Figure captions and their IDs"
+        description="Figure captions and their IDs",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
-        description="Additional extraction metadata"
+        description="Additional extraction metadata",
     )
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-
-
-class QueryExpansion(BaseModel):
-    """Result of query expansion.
-    
-    Attributes:
-        original_query: The original query
-        expanded_queries: List of expanded query strings
-        generated_at: When the expansion was generated
-        cache_hit: Whether this was a cache hit
-    """
-    original_query: str = Field(..., description="The original query")
-    expanded_queries: list[str] = Field(
-        default_factory=list,
-        description="List of expanded query strings"
-    )
-    generated_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="When the expansion was generated"
-    )
-    cache_hit: bool = Field(
-        default=False,
-        description="Whether this was a cache hit"
-    )
-
-    class Config:
-        json_encoders = {
-            datetime: lambda v: v.isoformat()
-        }
-
-
-class TableData(BaseModel):
-    """Structured table data extracted from PDF.
-    
-    Attributes:
-        caption: Table caption if available
-        headers: Column headers
-        rows: List of rows (each row is a list of cell values)
-        row_count: Number of data rows
-        col_count: Number of columns
-        page_number: Page number where table appears
-    """
-    caption: str | None = Field(None, description="Table caption")
-    headers: list[str] = Field(default_factory=list, description="Column headers")
-    rows: list[list[str]] = Field(default_factory=list, description="Table rows")
-    row_count: int = Field(default=0, description="Number of data rows")
-    col_count: int = Field(default=0, description="Number of columns")
-    page_number: int = Field(default=0, description="Page number")
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary for caching."""
-        return {
-            "caption": self.caption,
-            "headers": self.headers,
-            "rows": self.rows,
-            "row_count": self.row_count,
-            "col_count": self.col_count,
-            "page_number": self.page_number,
-        }
-
-
-class FigureData(BaseModel):
-    """Figure data extracted from PDF.
-    
-    Attributes:
-        figure_id: Unique figure identifier
-        caption: Figure caption
-        page_number: Page number where figure appears
-        alt_text: Alternative text if available
-    """
-    figure_id: str = Field(default="", description="Unique figure identifier")
-    caption: str = Field(default="", description="Figure caption")
-    page_number: int = Field(default=0, description="Page number")
-    alt_text: str | None = Field(None, description="Alternative text")
-
-    def to_dict(self) -> dict[str, str]:
-        """Convert to dictionary for storage."""
-        return {
-            "figure_id": self.figure_id,
-            "caption": self.caption,
-            "page_number": str(self.page_number),
-            "alt_text": self.alt_text,
-        }
-

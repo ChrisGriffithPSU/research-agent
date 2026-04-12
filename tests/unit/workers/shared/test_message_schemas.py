@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from src.workers.shared.message_schemas import (
+    ConceptGenerationRequest,
     ConceptsGenerated,
     NotificationRequest,
     PaperFullTextRequest,
-    ParsedPaper,
     PlanGenerated,
     CodeExecutionRequest,
     CodeExecutionResult,
@@ -28,8 +28,8 @@ def test_paper_fulltext_request_has_defaults_and_serialized_datetime() -> None:
     assert isinstance(payload["created_at"], str)
 
 
-def test_parsed_paper_has_defaults() -> None:
-    msg = ParsedPaper(
+def test_concept_generation_request_has_defaults() -> None:
+    msg = ConceptGenerationRequest(
         paper_id="p1",
         title="t",
         abstract="a",

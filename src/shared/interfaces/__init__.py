@@ -4,10 +4,9 @@ Allows dependency injection for testability and flexibility.
 All concrete implementations must honor these contracts.
 """
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Protocol
+from typing import Any, Protocol
 
 # ==================== Cache Interfaces ====================
 
@@ -166,6 +165,7 @@ class LLMResponse:
         model: Model used for generation
         usage: Token usage information
         latency_ms: Response latency in milliseconds
+        reasoning_details: Provider-specific reasoning details (e.g. chain-of-thought)
     """
 
     def __init__(
@@ -174,38 +174,42 @@ class LLMResponse:
         model: str,
         usage: dict[str, int] | None = None,
         latency_ms: float | None = None,
+        reasoning_details: Any | None = None,
     ):
         self.content = content
         self.model = model
         self.usage = usage or {}
         self.latency_ms = latency_ms
+        self.reasoning_details = reasoning_details
 
     def __repr__(self) -> str:
         return f"LLMResponse(content={self.content[:50]}..., model={self.model})"
 
 
 class ILLMClient(Protocol):
-    """Protocol for individual LLM client operations."""
+    """Protocol for LLM client operations."""
 
     @abstractmethod
     async def complete(
         self,
-        prompt: str,
+        prompt: str | None = None,
         system: str | None = None,
+        messages: list[dict[str, Any]] | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
-        response_format: dict[str, str] | None = None,
-        **kwargs,
+        response_format: dict[str, Any] | None = None,
+        **kwargs: Any,
     ) -> LLMResponse:
-        """Complete a prompt.
+        """Generate completion from LLM.
 
         Args:
-            prompt: User prompt
+            prompt: User prompt (mutually exclusive with messages)
             system: System prompt/instructions
-            temperature: Generation temperature
+            messages: Full message list for multi-turn conversations
+            temperature: Sampling temperature
             max_tokens: Maximum tokens to generate
             response_format: JSON schema for structured output
-            **kwargs: Additional args
+            **kwargs: Additional args (e.g. extra_body for provider-specific features)
 
         Returns:
             LLMResponse with generated content
@@ -214,7 +218,7 @@ class ILLMClient(Protocol):
 
     @abstractmethod
     async def health_check(self) -> bool:
-        """Check if provider is healthy.
+        """Check if LLM service is healthy.
 
         Returns:
             True if healthy, False otherwise

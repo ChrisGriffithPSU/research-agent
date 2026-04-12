@@ -1,7 +1,6 @@
 """Database configuration and async engine management."""
 
-
-from pydantic import Field, field_validator
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -55,16 +54,6 @@ class DatabaseConfig(BaseSettings):
         return (
             f"postgresql+asyncpg://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
         )
-
-    @field_validator("host")
-    @classmethod
-    def validate_host(cls, v: str) -> str:
-        """Validate database host.
-
-        Use 'postgres' when running in Docker (service name),
-        use 'localhost' when running locally.
-        """
-        return v
 
     def create_async_engine(self) -> AsyncEngine:
         """Create configured async database engine with connection pooling."""

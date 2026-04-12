@@ -14,7 +14,7 @@ Provides:
 """
 
 # Configuration
-from src.shared.messaging.circuit_breaker import (
+from src.shared.utils.circuit_breaker import (
     CircuitBreaker,
     circuit_breaker,
 )

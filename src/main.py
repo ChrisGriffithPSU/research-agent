@@ -81,6 +81,23 @@ def worker(
     """Run a specific worker."""
     setup_logging(verbose)
 
+    # Validate worker name before connecting to any infrastructure.
+    valid_workers = {
+        "pdf_parser",
+        "concept_gen",
+        "experiment_exploder",
+        "code_executor",
+        "evaluator",
+        "notifier",
+    }
+    if name not in valid_workers:
+        console.print(f"[red]Unknown worker: {name}[/red]")
+        console.print(
+            "Available workers: pdf_parser, concept_gen, experiment_exploder, "
+            "code_executor, evaluator, notifier"
+        )
+        raise SystemExit(1)
+
     async def run():
         from src.shared.llm.openai_client import OpenAIClient
 
@@ -138,13 +155,6 @@ def worker(
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
-        else:
-            console.print(f"[red]Unknown worker: {name}[/red]")
-            console.print(
-                "Available workers: pdf_parser, concept_gen, experiment_exploder, "
-                "code_executor, evaluator, notifier"
-            )
-            sys.exit(1)
 
         console.print(f"[green]Starting {name} worker...[/green]")
 

@@ -2,6 +2,7 @@
 
 Provides a clean interface for message publishing with injectable dependencies.
 """
+
 import asyncio
 import logging
 from typing import TYPE_CHECKING, Any, Optional
@@ -25,10 +26,10 @@ logger = logging.getLogger(__name__)
 
 class MessagePublisher:
     """RabbitMQ message publisher with injectable dependencies.
-    
+
     Publishes messages to a message broker with retry and circuit breaker support.
     All dependencies are injected through the constructor.
-    
+
     Example:
         # Production use with real connection
         connection = RabbitMQConnection(connection_string="amqp://localhost:5672/")
@@ -38,7 +39,7 @@ class MessagePublisher:
             circuit_breaker=CircuitBreaker(failure_threshold=5),
         )
         await connection.connect()
-        
+
         # Testing use with mocks
         from src.shared.testing.mocks import (
             MockMessageConnection,
@@ -49,13 +50,13 @@ class MessagePublisher:
             connection=MockMessageConnection(),
             retry_strategy=MockRetryStrategy(max_retries=3),
         )
-        
+
         # Use publisher
         await publisher.publish(
             message=MyMessage(),
             routing_key="test.queue",
         )
-    
+
     Attributes:
         _connection: Message broker connection (IMessageConnection)
         _retry_strategy: Strategy for retrying failed publishes
@@ -93,19 +94,21 @@ class MessagePublisher:
         immediate: bool = False,
     ) -> None:
         """Publish a message to the broker.
-        
+
         Args:
             message: Message to publish
             routing_key: Routing key for topic exchange
             mandatory: Fail if no queue is bound
             immediate: Fail if no consumer is ready
-            
+
         Raises:
             ConnectionError: If not connected to broker
             PublishError: If publish fails after all retries
         """
         if not self._connection.is_connected:
-            raise MessagingConnectionError("Not connected to message broker. Call connection.connect() first.")
+            raise MessagingConnectionError(
+                "Not connected to message broker. Call connection.connect() first."
+            )
 
         # Serialize message
         try:
@@ -130,7 +133,7 @@ class MessagePublisher:
         immediate: bool,
     ) -> None:
         """Publish message with retry logic.
-        
+
         Args:
             message_bytes: Serialized message bytes
             routing_key: Routing key for topic exchange
@@ -177,9 +180,7 @@ class MessagePublisher:
 
                 # Backoff and retry
                 backoff = self._retry_strategy.get_backoff(attempt)
-                logger.warning(
-                    f"Publish attempt {attempt} failed, retrying in {backoff:.2f}s: {e}"
-                )
+                logger.warning(f"Publish attempt {attempt} failed, retrying in {backoff:.2f}s: {e}")
 
                 await asyncio.sleep(backoff)
 
@@ -244,50 +245,9 @@ class MessagePublisher:
         if self._confirm_mode:
             logger.debug("Publisher confirms enabled - publish() is confirm-aware in aio-pika v9")
 
-    async def _do_publish_with_transaction(
-        self,
-        message_bytes: bytes,
-        routing_key: str,
-        mandatory: bool,
-        immediate: bool,
-    ) -> None:
-        """Publish message within a transaction for atomicity.
-
-        All messages in a transaction are committed together or rolled back.
-        Use this when you need to ensure multiple messages are published atomically.
-
-        Args:
-            message_bytes: Serialized message bytes
-            routing_key: Routing key for topic exchange
-            mandatory: Fail if no queue is bound
-            immediate: Fail if no consumer is ready
-
-        Raises:
-            ChannelError: If transaction commit fails
-        """
-        async with self._connection.create_transaction() as tx:
-            # Publish within transaction
-            channel = self._connection.channel
-
-            # Set delivery mode based on persistence setting
-            delivery_mode = (
-                aio_pika.DeliveryMode.PERSISTENT
-                if self._persistent
-                else aio_pika.DeliveryMode.NOT_PERSISTENT
-            )
-
-            await channel.publish(
-                body=message_bytes,
-                routing_key=routing_key,
-                mandatory=mandatory,
-                immediate=immediate,
-                delivery_mode=delivery_mode,
-            )
-            # Transaction commits on exit from context manager
-
     async def health_check(self) -> bool:
         """Check if publisher is healthy.
-        
+
         Returns:
             True if healthy, False otherwise
         """
@@ -322,34 +282,38 @@ class MessagePublisher:
 
 class MessagePublisherFactory:
     """Factory for creating MessagePublisher instances.
-    
+
     Provides convenient methods for creating publishers with common configurations.
     """
 
     @staticmethod
     def create_rabbitmq(
-        connection_string: str = "amqp://localhost:5672/",
+        config: "MessagingConfig | None" = None,
         max_retries: int = 5,
         base_delay: float = 1.0,
         failure_threshold: int = 5,
-        timeout: float = 60.0,
+        timeout_seconds: float = 60.0,
     ) -> MessagePublisher:
         """Create MessagePublisher with RabbitMQ connection.
-        
+
         Args:
-            connection_string: AMQP connection string
+            config: MessagingConfig instance (loads from env if None)
             max_retries: Maximum retry attempts
             base_delay: Base delay for exponential backoff
             failure_threshold: Circuit breaker failure threshold
-            timeout: Circuit breaker timeout
-            
+            timeout_seconds: Circuit breaker timeout in seconds
+
         Returns:
             Configured MessagePublisher instance
         """
-        from src.shared.messaging.circuit_breaker import CircuitBreaker
+        from src.shared.messaging.config import MessagingConfig
+        from src.shared.utils.circuit_breaker import CircuitBreaker
         from src.shared.messaging.connection import RabbitMQConnection
 
-        connection = RabbitMQConnection(connection_string=connection_string)
+        if config is None:
+            config = MessagingConfig()
+
+        connection = RabbitMQConnection(config=config)
 
         retry_strategy = ExponentialBackoffStrategy(
             max_retries=max_retries,
@@ -358,7 +322,7 @@ class MessagePublisherFactory:
 
         circuit_breaker = CircuitBreaker(
             failure_threshold=failure_threshold,
-            timeout=timeout,
+            timeout_seconds=int(timeout_seconds),
         )
 
         return MessagePublisher(
@@ -368,11 +332,11 @@ class MessagePublisherFactory:
         )
 
     @staticmethod
-    def create_null() -> 'NullMessagePublisher':
+    def create_null() -> "NullMessagePublisher":
         """Create null publisher that does nothing.
-        
+
         Useful for testing and development.
-        
+
         Returns:
             NullMessagePublisher instance
         """
@@ -380,13 +344,13 @@ class MessagePublisherFactory:
 
     @staticmethod
     def create_mock(
-        connection: Optional['MockMessageConnection'] = None,
-    ) -> 'MockMessagePublisher':
+        connection: Optional["MockMessageConnection"] = None,
+    ) -> "MockMessagePublisher":
         """Create mock publisher for testing.
-        
+
         Args:
             connection: Optional mock connection
-            
+
         Returns:
             MockMessagePublisher instance
         """
@@ -397,9 +361,9 @@ class MessagePublisherFactory:
 
 class NullMessagePublisher:
     """Null publisher that does nothing.
-    
+
     Useful for testing and when message publishing is optional.
-    
+
     Example:
         # Use in tests
         publisher = NullMessagePublisher()

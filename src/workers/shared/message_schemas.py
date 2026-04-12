@@ -56,8 +56,8 @@ class PaperFullTextRequest(BaseMessage):
     submitted_date: str | None = Field(None, description="Submission date")
 
 
-class ParsedPaper(BaseMessage):
-    """Parsed paper content.
+class ConceptGenerationRequest(BaseMessage):
+    """Request to generate concepts from a parsed paper.
 
     Published by: PDF Parser
     Consumed by: Concept Generator Agent
@@ -204,9 +204,7 @@ class ExperimentEvaluationRequest(BaseMessage):
     execution_status: Literal["success", "failed", "escalated"] = Field(
         ..., description="Execution status from code executor"
     )
-    execution_result: dict[str, Any] | None = Field(
-        None, description="Result data from execution"
-    )
+    execution_result: dict[str, Any] | None = Field(None, description="Result data from execution")
     stdout: str | None = Field(None, description="Execution stdout")
     stderr: str | None = Field(None, description="Execution stderr")
 
