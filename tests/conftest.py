@@ -10,6 +10,11 @@ from pathlib import Path
 
 import pytest
 
+# Load .env before any test runs
+from dotenv import load_dotenv
+
+load_dotenv(Path(__file__).parent.parent / ".env")
+
 
 def pytest_configure(config: pytest.Config) -> None:
     """Register project markers."""
@@ -71,109 +76,4 @@ def _install_docling_stub() -> None:
     sys.modules["docling.datamodel.pipeline_options"] = pipeline_options
 
 
-def _install_kaos_stub() -> None:
-    if "kaos.path" in sys.modules or _module_available("kaos.path"):
-        return
-
-    kaos = types.ModuleType("kaos")
-    kaos_path = types.ModuleType("kaos.path")
-
-    class KaosPath(str):
-        @staticmethod
-        def cwd() -> "KaosPath":
-            return KaosPath(str(Path.cwd()))
-
-    setattr(kaos_path, "KaosPath", KaosPath)
-    sys.modules["kaos"] = kaos
-    sys.modules["kaos.path"] = kaos_path
-
-
-def _install_kimi_sdk_stub() -> None:
-    if "kimi_agent_sdk" in sys.modules or _module_available("kimi_agent_sdk"):
-        return
-
-    kimi = types.ModuleType("kimi_agent_sdk")
-
-    class RunCancelled(Exception):
-        pass
-
-    class TextPart:
-        def __init__(self, text: str = "") -> None:
-            self.text = text
-
-    class ToolCallPart:
-        pass
-
-    class ToolResult:
-        pass
-
-    class ApprovalRequest:
-        def __init__(self, action: str = "", description: str = "", sender: str = "") -> None:
-            self.action = action
-            self.description = description
-            self.sender = sender
-            self.display: list[object] = []
-            self.resolved_with: str | None = None
-
-        def resolve(self, decision: str) -> None:
-            self.resolved_with = decision
-
-    class Session:
-        @staticmethod
-        async def create(*args, **kwargs):
-            return Session()
-
-        def prompt(self, _prompt: str, merge_wire_messages: bool = False):
-            async def _gen():
-                if False:
-                    yield None
-
-            return _gen()
-
-        def cancel(self) -> None:
-            return None
-
-        async def close(self) -> None:
-            return None
-
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, exc_type, exc, tb) -> None:
-            await self.close()
-
-    setattr(kimi, "RunCancelled", RunCancelled)
-    setattr(kimi, "TextPart", TextPart)
-    setattr(kimi, "ToolCallPart", ToolCallPart)
-    setattr(kimi, "ToolResult", ToolResult)
-    setattr(kimi, "ApprovalRequest", ApprovalRequest)
-    setattr(kimi, "Session", Session)
-    sys.modules["kimi_agent_sdk"] = kimi
-
-
-def _install_source_model_stub() -> None:
-    if "src.shared.models.source" in sys.modules or _module_available("src.shared.models.source"):
-        return
-
-    module = types.ModuleType("src.shared.models.source")
-
-    class SourceType(str, enum.Enum):
-        ARXIV = "arxiv"
-        KAGGLE = "kaggle"
-        HUGGINGFACE = "huggingface"
-        OTHER = "other"
-
-    class ProcessingStatus(str, enum.Enum):
-        FETCHED = "fetched"
-        PROCESSED = "processed"
-        FAILED = "failed"
-
-    setattr(module, "SourceType", SourceType)
-    setattr(module, "ProcessingStatus", ProcessingStatus)
-    sys.modules["src.shared.models.source"] = module
-
-
 _install_docling_stub()
-_install_kaos_stub()
-_install_kimi_sdk_stub()
-_install_source_model_stub()

@@ -6,7 +6,7 @@ provides best-effort validation so downstream code can rely on the shape.
 
 from __future__ import annotations
 
-from typing import Any, List, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -15,7 +15,7 @@ class CandidateObservationLens(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     lens_name: str
-    observables: List[str] = Field(default_factory=list)
+    observables: list[str] = Field(default_factory=list)
     notes: str = ""
 
 
@@ -24,7 +24,7 @@ class Manifestation(BaseModel):
 
     manifestation_type: str
     description: str
-    candidate_observation_lenses: List[CandidateObservationLens] = Field(default_factory=list)
+    candidate_observation_lenses: list[CandidateObservationLens] = Field(default_factory=list)
 
 
 class BinaryOutcomeDefinition(BaseModel):
@@ -48,7 +48,7 @@ class Hypothesis(BaseModel):
     track: Literal["A", "B"]
     statement: str
     mechanism: str
-    predictions: List[str] = Field(default_factory=list)
+    predictions: list[str] = Field(default_factory=list)
     discriminating_test: DiscriminatingTest
     minimal_viable_experiment: str
     kill_criteria: str
@@ -68,7 +68,7 @@ class DiscriminatingTestMatrixRow(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     test_name: str
-    effects: List[MatrixEffect] = Field(default_factory=list)
+    effects: list[MatrixEffect] = Field(default_factory=list)
     notes: str = ""
 
 
@@ -92,7 +92,7 @@ class Batch(BaseModel):
         "symmetry",
         "other",
     ]
-    hypotheses_targeted: List[str] = Field(default_factory=list)
+    hypotheses_targeted: list[str] = Field(default_factory=list)
     required_inputs: str
     outputs: str
     pass_fail_contract: PassFailContract
@@ -110,26 +110,26 @@ class ExperimentalDesign(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     unit_of_analysis: str
-    conditioning: List[str] = Field(default_factory=list)
-    controls: List[str] = Field(default_factory=list)
+    conditioning: list[str] = Field(default_factory=list)
+    controls: list[str] = Field(default_factory=list)
     train_test_protocol: str
-    regime_splits: List[str] = Field(default_factory=list)
+    regime_splits: list[str] = Field(default_factory=list)
 
 
 class Evaluation(BaseModel):
     model_config = ConfigDict(extra="allow")
 
-    primary_metrics: List[str] = Field(default_factory=list)
-    secondary_metrics: List[str] = Field(default_factory=list)
-    acceptance_thresholds: List[str] = Field(default_factory=list)
-    kill_criteria: List[str] = Field(default_factory=list)
+    primary_metrics: list[str] = Field(default_factory=list)
+    secondary_metrics: list[str] = Field(default_factory=list)
+    acceptance_thresholds: list[str] = Field(default_factory=list)
+    kill_criteria: list[str] = Field(default_factory=list)
 
 
 class RobustnessPerturbation(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     type: str
-    values: List[str] = Field(default_factory=list)
+    values: list[str] = Field(default_factory=list)
     expected_effect_if_real: str
     failure_signature: str
 
@@ -163,13 +163,13 @@ class ExperimentSpec(BaseModel):
     hypothesis_id: str
     experiment_name: str
     goal: str
-    observables_required: List[str] = Field(default_factory=list)
-    preprocessing: List[str] = Field(default_factory=list)
+    observables_required: list[str] = Field(default_factory=list)
+    preprocessing: list[str] = Field(default_factory=list)
     test_horizon_seconds: HorizonSeconds
     experimental_design: ExperimentalDesign
     evaluation: Evaluation
-    robustness_perturbations: List[RobustnessPerturbation] = Field(default_factory=list)
-    diagnostics_to_generate: List[Diagnostic] = Field(default_factory=list)
+    robustness_perturbations: list[RobustnessPerturbation] = Field(default_factory=list)
+    diagnostics_to_generate: list[Diagnostic] = Field(default_factory=list)
     latency_sensitivity_notes: str
     estimated_cost: EstimatedCost
     priority: Priority
@@ -181,11 +181,11 @@ class ExperimentPackage(BaseModel):
     concept_id: str
     concept_name: str
     invariant_restatement: str
-    manifestation_space: List[Manifestation] = Field(default_factory=list)
-    hypotheses: List[Hypothesis] = Field(default_factory=list)
-    discriminating_test_matrix: List[DiscriminatingTestMatrixRow] = Field(default_factory=list)
-    batches: List[Batch] = Field(default_factory=list)
-    experiments: List[ExperimentSpec] = Field(default_factory=list)
+    manifestation_space: list[Manifestation] = Field(default_factory=list)
+    hypotheses: list[Hypothesis] = Field(default_factory=list)
+    discriminating_test_matrix: list[DiscriminatingTestMatrixRow] = Field(default_factory=list)
+    batches: list[Batch] = Field(default_factory=list)
+    experiments: list[ExperimentSpec] = Field(default_factory=list)
 
 
 class PlanMeta(BaseModel):
@@ -200,7 +200,7 @@ class ExperimentExploderPlan(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     batch_id: str
-    experiment_packages: List[ExperimentPackage] = Field(default_factory=list)
+    experiment_packages: list[ExperimentPackage] = Field(default_factory=list)
     meta: PlanMeta = Field(default_factory=PlanMeta)
 
     def inferred_experiment_count(self) -> int:

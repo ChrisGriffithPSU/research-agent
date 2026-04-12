@@ -4,12 +4,10 @@ Implements rate limiting at 1 request per 3 seconds (arXiv limit).
 Uses asyncio for async-compatible rate limiting.
 """
 import asyncio
-import time
 import logging
-from typing import Optional
+import time
 
 from src.services.fetchers.arxiv.exceptions import RateLimitError
-
 
 logger = logging.getLogger(__name__)
 
@@ -32,12 +30,12 @@ class RateLimiter:
         tokens: Current token count
         last_update: Last update timestamp
     """
-    
+
     def __init__(
         self,
         rate: float = 0.333,  # 1 request per 3 seconds
         capacity: int = 1,
-        initial_tokens: Optional[float] = None,
+        initial_tokens: float | None = None,
     ):
         """Initialize rate limiter.
         
@@ -51,7 +49,7 @@ class RateLimiter:
         self.tokens = initial_tokens if initial_tokens is not None else capacity
         self.last_update = time.monotonic()
         self._lock = asyncio.Lock()
-    
+
     async def acquire(self) -> None:
         """Acquire permission to make a request.
         
@@ -63,49 +61,49 @@ class RateLimiter:
         async with self._lock:
             now = time.monotonic()
             elapsed = now - self.last_update
-            
+
             # Refill tokens based on elapsed time
             self.tokens = min(
                 self.capacity,
                 self.tokens + elapsed * self.rate
             )
             self.last_update = now
-            
+
             if self.tokens >= 1:
                 # Token available, consume it
                 self.tokens -= 1
                 logger.debug(f"Rate limiter: acquired token, {self.tokens:.2f} remaining")
                 return
-            
+
             # No token available, calculate wait time
             wait_time = (1 - self.tokens) / self.rate
-        
+
         # Release lock before waiting
         logger.debug(f"Rate limiter: waiting {wait_time:.2f}s for token")
         await asyncio.sleep(wait_time)
-        
+
         # Try again (should have token now)
         async with self._lock:
             now = time.monotonic()
             elapsed = now - self.last_update
-            
+
             self.tokens = min(
                 self.capacity,
                 self.tokens + elapsed * self.rate
             )
             self.last_update = now
-            
+
             if self.tokens >= 1:
                 self.tokens -= 1
                 logger.debug(f"Rate limiter: acquired after wait, {self.tokens:.2f} remaining")
                 return
-            
+
             # This shouldn't happen, but handle gracefully
             raise RateLimitError(
                 message="Failed to acquire rate limit token",
                 retry_after=int(wait_time + 1),
             )
-    
+
     async def get_delay(self) -> float:
         """Get the delay until next request is allowed.
         
@@ -115,18 +113,18 @@ class RateLimiter:
         async with self._lock:
             now = time.monotonic()
             elapsed = now - self.last_update
-            
+
             self.tokens = min(
                 self.capacity,
                 self.tokens + elapsed * self.rate
             )
             self.last_update = now
-            
+
             if self.tokens >= 1:
                 return 0.0
-            
+
             return (1 - self.tokens) / self.rate
-    
+
     async def try_acquire(self) -> bool:
         """Try to acquire a token without blocking.
         
@@ -136,25 +134,25 @@ class RateLimiter:
         async with self._lock:
             now = time.monotonic()
             elapsed = now - self.last_update
-            
+
             self.tokens = min(
                 self.capacity,
                 self.tokens + elapsed * self.rate
             )
             self.last_update = now
-            
+
             if self.tokens >= 1:
                 self.tokens -= 1
                 return True
-            
+
             return False
-    
+
     def reset(self) -> None:
         """Reset rate limiter state."""
         self.tokens = self.capacity
         self.last_update = time.monotonic()
         logger.info("Rate limiter reset")
-    
+
     def get_available_tokens(self) -> float:
         """Get number of available tokens.
         
@@ -168,7 +166,7 @@ class RateLimiter:
             self.tokens + elapsed * self.rate
         )
         return tokens
-    
+
     def get_stats(self) -> dict:
         """Get rate limiter statistics.
         
@@ -181,7 +179,7 @@ class RateLimiter:
             "available_tokens": self.get_available_tokens(),
             "wait_time": (1 - self.tokens) / self.rate if self.tokens < 1 else 0,
         }
-    
+
     def __repr__(self) -> str:
         tokens = self.get_available_tokens()
         return (
@@ -204,7 +202,7 @@ class AdaptiveRateLimiter:
         backoff_factor: Multiplier for backoff on 429
         recovery_factor: Multiplier for rate recovery on success
     """
-    
+
     def __init__(
         self,
         base_rate: float = 0.33,  # 1 req/3s
@@ -227,21 +225,21 @@ class AdaptiveRateLimiter:
         self.max_rate = max_rate
         self.backoff_factor = backoff_factor
         self.recovery_factor = recovery_factor
-        
+
         self.current_rate = base_rate
         self.rate_limiter = RateLimiter(rate=base_rate)
         self._consecutive_429s = 0
         self._consecutive_successes = 0
-    
+
     async def acquire(self) -> None:
         """Acquire permission with adaptive rate limiting."""
         await self.rate_limiter.acquire()
-    
+
     async def on_success(self) -> None:
         """Called on successful API response."""
         self._consecutive_429s = 0
         self._consecutive_successes += 1
-        
+
         # Gradually increase rate on success
         if self._consecutive_successes >= 3:
             new_rate = min(
@@ -253,7 +251,7 @@ class AdaptiveRateLimiter:
                 self.rate_limiter = RateLimiter(rate=new_rate)
                 logger.info(f"Rate limiter: increased rate to {new_rate:.3f}/s")
             self._consecutive_successes = 0
-    
+
     async def on_rate_limit(self, retry_after: int = 3) -> None:
         """Called on 429 rate limit response.
         
@@ -262,13 +260,13 @@ class AdaptiveRateLimiter:
         """
         self._consecutive_429s += 1
         self._consecutive_successes = 0
-        
+
         # Decrease rate based on consecutive failures
         new_rate = max(
             self.min_rate,
             self.current_rate * (self.backoff_factor ** self._consecutive_429s)
         )
-        
+
         if new_rate != self.current_rate:
             self.current_rate = new_rate
             self.rate_limiter = RateLimiter(rate=new_rate)
@@ -276,7 +274,7 @@ class AdaptiveRateLimiter:
                 f"Rate limiter: decreased rate to {new_rate:.3f}/s "
                 f"({self._consecutive_429s} consecutive 429s)"
             )
-    
+
     def get_stats(self) -> dict:
         """Get rate limiter statistics.
         
@@ -289,7 +287,7 @@ class AdaptiveRateLimiter:
             "consecutive_429s": self._consecutive_429s,
             "consecutive_successes": self._consecutive_successes,
         }
-    
+
     def __repr__(self) -> str:
         return (
             f"AdaptiveRateLimiter("

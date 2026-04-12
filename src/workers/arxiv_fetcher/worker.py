@@ -1,25 +1,22 @@
 """ArXiv fetcher worker.
 
-Fetches papers from hardcoded categories and publishes to triage queue.
+Fetches papers from hardcoded categories and publishes to PDF parser queue.
 No LLM-based query expansion - simple category-based fetching only.
 """
 
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Set
 
 import httpx
-
-from src.services.fetchers.arxiv.services.api_client import ArxivAPIClient
 from src.services.fetchers.arxiv.schemas.paper import PaperMetadata
-from src.workers.arxiv_fetcher.config import ArxivFetcherConfig, HARDCODED_CATEGORIES
-from src.workers.shared.message_schemas import PaperTriageRequest
+from src.services.fetchers.arxiv.services.api_client import ArxivAPIClient
 from src.shared.db.config import get_session_factory
 from src.shared.messaging.connection import get_connection
 from src.shared.messaging.publisher import MessagePublisher
 from src.shared.repositories.paper_repository import PaperRepository
-
+from src.workers.arxiv_fetcher.config import ArxivFetcherConfig
+from src.workers.shared.message_schemas import PaperFullTextRequest
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +43,7 @@ class FetcherState:
     published_count: int = 0
     duplicate_count: int = 0
     error_count: int = 0
-    processed_ids: Optional[Set[str]] = None
+    processed_ids: set[str] | None = None
 
     def __post_init__(self):
         if self.processed_ids is None:
@@ -54,7 +51,7 @@ class FetcherState:
 
 
 class ArxivFetcherWorker:
-    """Worker that fetches ArXiv papers and publishes to triage queue.
+    """Worker that fetches ArXiv papers and publishes to PDF parser queue.
 
     Fetches from hardcoded categories only - no LLM-based query expansion.
     Implements duplicate detection to avoid processing same paper twice.
@@ -76,7 +73,7 @@ class ArxivFetcherWorker:
 
     @staticmethod
     async def create_dependencies(
-        config: Optional[ArxivFetcherConfig] = None,
+        config: ArxivFetcherConfig | None = None,
     ) -> FetcherDependencies:
         """Create default dependencies from environment.
 
@@ -147,7 +144,7 @@ class ArxivFetcherWorker:
             if hasattr(self.deps.paper_repository, "session"):
                 await self.deps.paper_repository.session.close()
 
-    async def _fetch_all_categories(self) -> List[PaperMetadata]:
+    async def _fetch_all_categories(self) -> list[PaperMetadata]:
         """Fetch papers from all configured categories.
 
         Uses semaphore to limit concurrent category fetches.
@@ -155,10 +152,10 @@ class ArxivFetcherWorker:
         Returns:
             List of all fetched papers
         """
-        all_papers: List[PaperMetadata] = []
+        all_papers: list[PaperMetadata] = []
         semaphore = asyncio.Semaphore(self.deps.config.max_concurrent_categories)
 
-        async def fetch_with_limit(category: str) -> List[PaperMetadata]:
+        async def fetch_with_limit(category: str) -> list[PaperMetadata]:
             async with semaphore:
                 return await self._fetch_category(category)
 
@@ -175,7 +172,7 @@ class ArxivFetcherWorker:
 
         return all_papers
 
-    async def _fetch_category(self, category: str) -> List[PaperMetadata]:
+    async def _fetch_category(self, category: str) -> list[PaperMetadata]:
         """Fetch papers from a single category.
 
         Args:
@@ -200,7 +197,7 @@ class ArxivFetcherWorker:
             logger.error(f"Error fetching category {category}: {e}")
             raise
 
-    async def _process_papers(self, papers: List[PaperMetadata]) -> None:
+    async def _process_papers(self, papers: list[PaperMetadata]) -> None:
         """Process fetched papers - filter duplicates and publish.
 
         Args:
@@ -241,12 +238,12 @@ class ArxivFetcherWorker:
                 self.state.error_count += 1
 
     async def _publish_paper(self, paper: PaperMetadata) -> None:
-        """Publish paper triage request message.
+        """Publish paper full text request message.
 
         Args:
             paper: Paper metadata to publish
         """
-        message = PaperTriageRequest(
+        message = PaperFullTextRequest(
             paper_id=paper.paper_id,
             title=paper.title,
             authors=paper.authors,
@@ -262,7 +259,7 @@ class ArxivFetcherWorker:
             routing_key=self.deps.config.output_queue,
         )
 
-        logger.debug(f"Published triage request for: {paper.paper_id}")
+        logger.debug(f"Published full text request for: {paper.paper_id}")
 
     async def health_check(self) -> bool:
         """Check if fetcher is healthy.

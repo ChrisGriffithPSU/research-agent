@@ -1,16 +1,14 @@
 """Custom exceptions for the application."""
 
 from src.shared.exceptions.base import (
-    ResearchAgentError,
     CircuitOpenError,
+    ResearchAgentError,
 )
-
 from src.shared.exceptions.database import (
     DatabaseError,
     RepositoryConflictError,
     RepositoryNotFoundError,
 )
-
 from src.shared.exceptions.llm import (
     LLMError,
     LLMProviderError,

@@ -1,5 +1,4 @@
 """Messaging-related exceptions."""
-from typing import Optional
 
 
 class MessagingError(Exception):
@@ -8,7 +7,7 @@ class MessagingError(Exception):
     def __init__(
         self,
         message: str,
-        original: Optional[Exception] = None,
+        original: Exception | None = None,
     ):
         self.message = message
         self.original = original
@@ -102,9 +101,9 @@ class ChannelClosedError(ChannelError):
     def __init__(
         self,
         message: str,
-        reply_code: Optional[int] = None,
-        reply_text: Optional[str] = None,
-        original: Optional[Exception] = None,
+        reply_code: int | None = None,
+        reply_text: str | None = None,
+        original: Exception | None = None,
     ):
         self.reply_code = reply_code
         self.reply_text = reply_text
@@ -127,9 +126,9 @@ class ConnectionClosedError(ConnectionError):
     def __init__(
         self,
         message: str,
-        reply_code: Optional[int] = None,
-        reply_text: Optional[str] = None,
-        original: Optional[Exception] = None,
+        reply_code: int | None = None,
+        reply_text: str | None = None,
+        original: Exception | None = None,
     ):
         self.reply_code = reply_code
         self.reply_text = reply_text
@@ -159,8 +158,8 @@ class PreconditionFailedError(MessagingError):
     def __init__(
         self,
         message: str,
-        condition: Optional[str] = None,
-        original: Optional[Exception] = None,
+        condition: str | None = None,
+        original: Exception | None = None,
     ):
         self.condition = condition
         super().__init__(message, original=original)
@@ -183,10 +182,10 @@ class ConfirmFailedError(MessagingError):
     def __init__(
         self,
         message: str,
-        delivery_tag: Optional[int] = None,
-        reply_code: Optional[int] = None,
-        reply_text: Optional[str] = None,
-        original: Optional[Exception] = None,
+        delivery_tag: int | None = None,
+        reply_code: int | None = None,
+        reply_text: str | None = None,
+        original: Exception | None = None,
     ):
         self.delivery_tag = delivery_tag
         self.reply_code = reply_code

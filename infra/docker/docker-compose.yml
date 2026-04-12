@@ -6,7 +6,6 @@ networks:
 
 volumes:
   postgres-data:
-  redis-data:
   rabbitmq-data:
   artifacts:
 
@@ -28,22 +27,6 @@ services:
       - researcher-net
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  redis:
-    image: redis:7-alpine
-    container_name: researcher-redis
-    restart: unless-stopped
-    volumes:
-      - redis-data:/data
-    ports:
-      - "6379:6379"
-    networks:
-      - researcher-net
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -73,8 +56,6 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
-      args:
-        UV_EXTRA: main
     container_name: researcher-arxiv-fetcher
     restart: unless-stopped
     command: python -m src.main scheduler --interval 30
@@ -92,45 +73,11 @@ services:
     networks:
       - researcher-net
 
-  # PAPER TRIAGE WORKER
-  paper-triage:
-    build:
-      context: ../../
-      dockerfile: infra/docker/Dockerfile.worker
-      args:
-        UV_EXTRA: main
-    container_name: researcher-paper-triage
-    restart: unless-stopped
-    command: python -m src.main worker triage
-    environment:
-      - DB_HOST=postgres
-      - RABBITMQ_HOST=rabbitmq
-      - ARTIFACTS_BASE_DIR=/app/artifacts
-      - CUSTOM_LLM_BASE_URL=${CUSTOM_LLM_BASE_URL}
-      - CUSTOM_LLM_API_KEY=${CUSTOM_LLM_API_KEY}
-      - CUSTOM_LLM_MODEL=${CUSTOM_LLM_MODEL}
-      - CUSTOM_LLM_TRIAGE_BASE_URL=${CUSTOM_LLM_TRIAGE_BASE_URL}
-      - CUSTOM_LLM_TRIAGE_API_KEY=${CUSTOM_LLM_TRIAGE_API_KEY}
-      - CUSTOM_LLM_TRIAGE_MODEL=${CUSTOM_LLM_TRIAGE_MODEL}
-      - CUSTOM_LLM_TRIAGE_MAX_RETRIES=${CUSTOM_LLM_TRIAGE_MAX_RETRIES}
-      - CUSTOM_LLM_TRIAGE_TIMEOUT_SECONDS=${CUSTOM_LLM_TRIAGE_TIMEOUT_SECONDS}
-    volumes:
-      - artifacts:/app/artifacts
-    depends_on:
-      rabbitmq:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    networks:
-      - researcher-net
-
   # PDF PARSER WORKER
   pdf-parser:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
-      args:
-        UV_EXTRA: arxiv
     container_name: researcher-pdf-parser
     restart: unless-stopped
     command: python -m src.main worker pdf_parser
@@ -151,8 +98,6 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
-      args:
-        UV_EXTRA: main
     container_name: researcher-concept-generator
     restart: unless-stopped
     command: python -m src.main worker concept_gen
@@ -163,11 +108,6 @@ services:
       - CUSTOM_LLM_BASE_URL=${CUSTOM_LLM_BASE_URL}
       - CUSTOM_LLM_API_KEY=${CUSTOM_LLM_API_KEY}
       - CUSTOM_LLM_MODEL=${CUSTOM_LLM_MODEL}
-      - CUSTOM_LLM_CONCEPT_GEN_BASE_URL=${CUSTOM_LLM_CONCEPT_GEN_BASE_URL}
-      - CUSTOM_LLM_CONCEPT_GEN_API_KEY=${CUSTOM_LLM_CONCEPT_GEN_API_KEY}
-      - CUSTOM_LLM_CONCEPT_GEN_MODEL=${CUSTOM_LLM_CONCEPT_GEN_MODEL}
-      - CUSTOM_LLM_CONCEPT_GEN_MAX_RETRIES=${CUSTOM_LLM_CONCEPT_GEN_MAX_RETRIES}
-      - CUSTOM_LLM_CONCEPT_GEN_TIMEOUT_SECONDS=${CUSTOM_LLM_CONCEPT_GEN_TIMEOUT_SECONDS}
     volumes:
       - artifacts:/app/artifacts
     depends_on:
@@ -183,8 +123,6 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
-      args:
-        UV_EXTRA: main
     container_name: researcher-experiment-exploder
     restart: unless-stopped
     command: python -m src.main worker experiment_exploder
@@ -195,11 +133,50 @@ services:
       - CUSTOM_LLM_BASE_URL=${CUSTOM_LLM_BASE_URL}
       - CUSTOM_LLM_API_KEY=${CUSTOM_LLM_API_KEY}
       - CUSTOM_LLM_MODEL=${CUSTOM_LLM_MODEL}
-      - CUSTOM_LLM_EXPERIMENT_EXPLODER_BASE_URL=${CUSTOM_LLM_EXPERIMENT_EXPLODER_BASE_URL}
-      - CUSTOM_LLM_EXPERIMENT_EXPLODER_API_KEY=${CUSTOM_LLM_EXPERIMENT_EXPLODER_API_KEY}
-      - CUSTOM_LLM_EXPERIMENT_EXPLODER_MODEL=${CUSTOM_LLM_EXPERIMENT_EXPLODER_MODEL}
-      - CUSTOM_LLM_EXPERIMENT_EXPLODER_MAX_RETRIES=${CUSTOM_LLM_EXPERIMENT_EXPLODER_MAX_RETRIES}
-      - CUSTOM_LLM_EXPERIMENT_EXPLODER_TIMEOUT_SECONDS=${CUSTOM_LLM_EXPERIMENT_EXPLODER_TIMEOUT_SECONDS}
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - researcher-net
+
+  # CODE EXECUTOR WORKER
+  code-executor:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: researcher-code-executor
+    restart: unless-stopped
+    command: python -m src.main worker code_executor
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - ARTIFACTS_BASE_DIR=/app/artifacts
+      - CUSTOM_LLM_BASE_URL=${CUSTOM_LLM_BASE_URL}
+      - CUSTOM_LLM_API_KEY=${CUSTOM_LLM_API_KEY}
+      - CUSTOM_LLM_MODEL=${CUSTOM_LLM_MODEL}
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - researcher-net
+
+  # EXPERIMENT EVALUATOR WORKER
+  experiment-evaluator:
+    build:
+      context: ../../
+      dockerfile: infra/docker/Dockerfile.worker
+    container_name: researcher-experiment-evaluator
+    restart: unless-stopped
+    command: python -m src.main worker evaluator
+    environment:
+      - RABBITMQ_HOST=rabbitmq
+      - ARTIFACTS_BASE_DIR=/app/artifacts
+      - CUSTOM_LLM_BASE_URL=${CUSTOM_LLM_BASE_URL}
+      - CUSTOM_LLM_API_KEY=${CUSTOM_LLM_API_KEY}
+      - CUSTOM_LLM_MODEL=${CUSTOM_LLM_MODEL}
     volumes:
       - artifacts:/app/artifacts
     depends_on:
@@ -213,13 +190,10 @@ services:
     build:
       context: ../../
       dockerfile: infra/docker/Dockerfile.worker
-      args:
-        UV_EXTRA: main
     container_name: researcher-notifier
     restart: unless-stopped
     command: python -m src.main worker notifier
     environment:
-      - DB_HOST=postgres
       - RABBITMQ_HOST=rabbitmq
       - SLACK_WEBHOOK_URL=${SLACK_WEBHOOK_URL}
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN}

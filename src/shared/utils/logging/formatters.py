@@ -3,7 +3,7 @@ import json
 import logging
 import traceback
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any
 
 
 def _serialize_value(value: Any) -> Any:
@@ -78,7 +78,7 @@ class StructuredJSONFormatter(logging.Formatter):
     - exception (if applicable)
     - stack_trace (if exception)
     """
-    
+
     def __init__(self, service_name: str = "unknown"):
         """Initialize formatter.
         
@@ -87,7 +87,7 @@ class StructuredJSONFormatter(logging.Formatter):
         """
         super().__init__()
         self.service_name = service_name
-    
+
     def format(self, record: logging.LogRecord) -> bool:
         """Format log record as JSON.
         
@@ -99,7 +99,7 @@ class StructuredJSONFormatter(logging.Formatter):
         """
         # Extract context if available
         context = getattr(record, "extra_context", {})
-        
+
         # Build log entry
         log_entry = {
             "timestamp": datetime.fromtimestamp(record.created).isoformat(),
@@ -111,7 +111,7 @@ class StructuredJSONFormatter(logging.Formatter):
             "request_id": context.get("request_id"),
             "operation_name": context.get("operation_name"),
         }
-        
+
         # Add source info
         if hasattr(record, "pathname"):
             log_entry["source_file"] = record.pathname
@@ -119,7 +119,7 @@ class StructuredJSONFormatter(logging.Formatter):
             log_entry["source_line"] = record.lineno
         if hasattr(record, "funcName"):
             log_entry["source_function"] = record.funcName
-        
+
         # Add exception info if present
         if record.exc_info:
             exc_type, exc_value, exc_tb = record.exc_info
@@ -128,20 +128,20 @@ class StructuredJSONFormatter(logging.Formatter):
                 "message": str(exc_value) if exc_value else None,
                 "module": exc_type.__module__ if exc_type else None,
             }
-            
+
             # Add stack trace if available
             if exc_tb:
                 log_entry["stack_trace"] = traceback.format_exception(exc_type, exc_value, exc_tb)
-        
+
         # Redact sensitive data from extra fields
         extra_context_redacted = _redact_sensitive(context)
         log_entry.update(extra_context_redacted)
-        
+
         # Ensure all values are JSON-serializable
         log_entry_serializable = {}
         for key, value in log_entry.items():
             log_entry_serializable[key] = _serialize_value(value)
-        
+
         try:
             return json.dumps(log_entry_serializable, default=str)
         except Exception as e:

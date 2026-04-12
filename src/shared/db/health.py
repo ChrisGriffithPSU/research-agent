@@ -1,10 +1,8 @@
 """Database health check functionality."""
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.shared.db.session import _get_factory
 
 logger = logging.getLogger(__name__)
@@ -18,7 +16,7 @@ async def check_health() -> dict:
     """
     health = {
         "status": "healthy",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "checks": {},
     }
 

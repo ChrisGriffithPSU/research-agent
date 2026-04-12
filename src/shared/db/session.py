@@ -1,9 +1,8 @@
 """Async session management for database operations."""
 import asyncio
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.shared.db.config import get_session_factory
 
 # Global session factory (created on first use)
@@ -27,7 +26,7 @@ async def _get_factory():
     return _session_factory
 
 
-async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
+async def get_async_session() -> AsyncGenerator[AsyncSession]:
     """Dependency injection for FastAPI endpoints.
 
     Yields an async session and ensures proper cleanup.
@@ -65,7 +64,7 @@ class DatabaseSession:
     """
 
     def __init__(self):
-        self._session: Optional[AsyncSession] = None
+        self._session: AsyncSession | None = None
 
     async def __aenter__(self) -> AsyncSession:
         """Enter context and create session."""

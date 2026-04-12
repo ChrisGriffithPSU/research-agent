@@ -4,10 +4,7 @@ import functools
 import logging
 import random
 import time
-from typing import Callable, Optional, Tuple, Type
-
-from src.shared.exceptions import ResearchAgentError
-
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -33,12 +30,12 @@ def calculate_backoff(
     """
     delay = base_seconds * (factor ** attempt)
     delay = min(delay, max_seconds)
-    
+
     # Add jitter: +/- jitter_percent
     if jitter_percent > 0:
         jitter = delay * jitter_percent
         delay = delay + random.uniform(-jitter, jitter)
-    
+
     return max(0, delay)
 
 
@@ -48,8 +45,8 @@ def retry(
     backoff_base: float = 1.0,
     max_backoff_seconds: float = 60.0,
     jitter_percent: float = 0.25,
-    retry_on: Optional[Tuple[Type[Exception]]] = None,
-    on_retry_callback: Optional[Callable[[int, Exception], None]] = None,
+    retry_on: tuple[type[Exception]] | None = None,
+    on_retry_callback: Callable[[int, Exception], None] | None = None,
 ):
     """Decorator for retrying functions with exponential backoff.
     
@@ -73,7 +70,7 @@ def retry(
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs):
             last_exception = None
-            
+
             for attempt in range(max_attempts):
                 try:
                     if attempt > 0:
@@ -94,12 +91,12 @@ def retry(
                             },
                         )
                         await asyncio.sleep(delay)
-                    
+
                     return await func(*args, **kwargs)
-                
+
                 except Exception as e:
                     last_exception = e
-                    
+
                     # Check if we should retry this exception
                     if retry_on is not None and not isinstance(e, retry_on):
                         logger.error(
@@ -107,7 +104,7 @@ def retry(
                             extra={"function": func.__name__, "exception_type": type(e).__name__},
                         )
                         raise
-                    
+
                     # Call callback if provided
                     if on_retry_callback:
                         try:
@@ -117,7 +114,7 @@ def retry(
                                 f"Retry callback failed: {cb_error}",
                                 extra={"function": func.__name__, "callback_error": str(cb_error)},
                             )
-                    
+
                     # Log retry
                     logger.warning(
                         f"{func.__name__} failed (attempt {attempt + 1}/{max_attempts}): {type(e).__name__}",
@@ -130,7 +127,7 @@ def retry(
                         },
                     exc_info=True,
                     )
-            
+
             # Max attempts reached, raise last exception
             logger.error(
                 f"{func.__name__} failed after {max_attempts} attempts",
@@ -140,11 +137,11 @@ def retry(
                 raise last_exception
             else:
                 raise RuntimeError(f"{func.__name__} failed with no exception logged")
-        
+
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
             last_exception = None
-            
+
             for attempt in range(max_attempts):
                 try:
                     if attempt > 0:
@@ -165,12 +162,12 @@ def retry(
                             },
                         )
                         time.sleep(delay)
-                    
+
                     return func(*args, **kwargs)
-                
+
                 except Exception as e:
                     last_exception = e
-                    
+
                     # Check if we should retry this exception
                     if retry_on is not None and not isinstance(e, retry_on):
                         logger.error(
@@ -178,7 +175,7 @@ def retry(
                             extra={"function": func.__name__, "exception_type": type(e).__name__},
                         )
                         raise
-                    
+
                     # Call callback if provided
                     if on_retry_callback:
                         try:
@@ -188,7 +185,7 @@ def retry(
                                 f"Retry callback failed: {cb_error}",
                                 extra={"function": func.__name__, "callback_error": str(cb_error)},
                             )
-                    
+
                     # Log retry
                     logger.warning(
                         f"{func.__name__} failed (attempt {attempt + 1}/{max_attempts}): {type(e).__name__}",
@@ -201,7 +198,7 @@ def retry(
                         },
                         exc_info=True,
                     )
-            
+
             # Max attempts reached, raise last exception
             logger.error(
                 f"{func.__name__} failed after {max_attempts} attempts",
@@ -211,12 +208,12 @@ def retry(
                 raise last_exception
             else:
                 raise RuntimeError(f"{func.__name__} failed with no exception logged")
-        
+
         # Return appropriate wrapper based on function type
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         else:
             return sync_wrapper
-    
+
     return decorator
 

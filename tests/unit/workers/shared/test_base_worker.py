@@ -8,7 +8,7 @@ import pytest
 from pydantic import BaseModel
 
 from src.workers.shared.base_worker import BaseWorker, WorkerConfig
-from src.workers.shared.message_schemas import PaperTriageRequest
+from src.workers.shared.message_schemas import PaperFullTextRequest
 from tests.helpers.fakes import DummyConsumer, DummyPublisher
 
 
@@ -21,7 +21,7 @@ class _Worker(BaseWorker):
         await self.publish("out.queue", _OutMessage(value="ok"))
 
     def get_message_type(self):
-        return PaperTriageRequest
+        return PaperFullTextRequest
 
 
 @pytest.mark.asyncio
@@ -29,7 +29,7 @@ async def test_start_registers_consumer_subscription_and_sets_running() -> None:
     consumer = DummyConsumer()
     publisher = DummyPublisher()
     worker = _Worker(
-        config=WorkerConfig(queue_name="content.discovered"),
+        config=WorkerConfig(queue_name="paper.fulltext.request"),
         message_consumer=consumer,  # type: ignore[arg-type]
         message_publisher=publisher,  # type: ignore[arg-type]
     )
@@ -45,12 +45,12 @@ async def test_handle_message_calls_process_and_publishes() -> None:
     consumer = DummyConsumer()
     publisher = DummyPublisher()
     worker = _Worker(
-        config=WorkerConfig(queue_name="content.discovered"),
+        config=WorkerConfig(queue_name="paper.fulltext.request"),
         message_consumer=consumer,  # type: ignore[arg-type]
         message_publisher=publisher,  # type: ignore[arg-type]
     )
 
-    msg = PaperTriageRequest(
+    msg = PaperFullTextRequest(
         paper_id="p1",
         title="t",
         abstract="a",
@@ -67,7 +67,7 @@ async def test_stop_clears_running_and_stops_consumer() -> None:
     consumer = DummyConsumer()
     publisher = DummyPublisher()
     worker = _Worker(
-        config=WorkerConfig(queue_name="content.discovered"),
+        config=WorkerConfig(queue_name="paper.fulltext.request"),
         message_consumer=consumer,  # type: ignore[arg-type]
         message_publisher=publisher,  # type: ignore[arg-type]
     )

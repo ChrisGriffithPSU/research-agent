@@ -48,39 +48,32 @@ class _Conn:
         self.depths: dict[str, int] = {}
 
     async def get_queue_info(self, queue_name: str):
-        if queue_name == QueueName.DIGEST_READY.value:
+        if queue_name == QueueName.PAPER_PARSED.value:
             raise RuntimeError("boom")
         if queue_name in self.depths:
             return {"message_count": self.depths[queue_name], "consumer_count": 1}
         return None
 
 
-def test_get_dlq_name_maps_all_main_queues() -> None:
-    setup = QueueSetup(_Conn())  # type: ignore[arg-type]
-    assert setup._get_dlq_name(QueueName.CONTENT_DISCOVERED) == QueueName.CONTENT_DISCOVERED_DLQ
-    assert setup._get_dlq_name(QueueName.TRAINING_TRIGGER) == QueueName.TRAINING_TRIGGER_DLQ
-
-
 @pytest.mark.asyncio
-async def test_declare_queue_adds_dead_letter_and_limits() -> None:
+async def test_declare_queue_adds_dead_letter_routing() -> None:
     conn = _Conn()
     setup = QueueSetup(conn)  # type: ignore[arg-type]
+    dlq = QueueName.PAPER_FULLTEXT_DLQ
     await setup._declare_queue(
-        QueueName.CONTENT_DISCOVERED,
-        {"max_length": 100, "ttl": 2000, "routing_key": "content.discovered"},
+        QueueName.PAPER_FULLTEXT_REQUEST.value,
+        {"x-dead-letter-exchange": DLQ_EXCHANGE_NAME, "x-dead-letter-routing-key": dlq.value},
     )
     _, args = conn.channel.declared_queues[-1]
     assert args["x-dead-letter-exchange"] == DLQ_EXCHANGE_NAME
-    assert args["x-dead-letter-routing-key"] == QueueName.CONTENT_DISCOVERED_DLQ.value
-    assert args["x-message-ttl"] == 2000
-    assert args["x-max-length"] == 100
+    assert args["x-dead-letter-routing-key"] == dlq.value
 
 
 @pytest.mark.asyncio
 async def test_get_queue_depths_handles_lookup_errors() -> None:
     conn = _Conn()
-    conn.depths[QueueName.CONTENT_DISCOVERED.value] = 5
+    conn.depths[QueueName.PAPER_FULLTEXT_REQUEST.value] = 5
     setup = QueueSetup(conn)  # type: ignore[arg-type]
     depths = await setup.get_queue_depths()
-    assert depths[QueueName.CONTENT_DISCOVERED.value] == 5
-    assert depths[QueueName.DIGEST_READY.value] == -1
+    assert depths[QueueName.PAPER_FULLTEXT_REQUEST.value] == 5
+    assert depths[QueueName.PAPER_PARSED.value] == -1

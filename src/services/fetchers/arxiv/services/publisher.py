@@ -4,19 +4,17 @@ Uses injectable message publisher for testability.
 """
 import asyncio
 import logging
-from typing import List, Optional, Dict, Any
-from datetime import datetime
+from typing import Any
 
-from src.shared.interfaces import IMessagePublisher
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
-from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, ParsedContent
+from src.services.fetchers.arxiv.exceptions import MessagePublishingError
 from src.services.fetchers.arxiv.schemas.messages import (
     ArxivDiscoveredMessage,
-    ArxivParseRequestMessage,
     ArxivExtractedMessage,
+    ArxivParseRequestMessage,
 )
-from src.services.fetchers.arxiv.exceptions import MessagePublishingError
-
+from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, ParsedContent
+from src.shared.interfaces import IMessagePublisher
 
 logger = logging.getLogger(__name__)
 
@@ -60,11 +58,11 @@ class ArxivMessagePublisher:
         config: ArXiv fetcher configuration
         _initialized: Whether the service has been initialized
     """
-    
+
     def __init__(
         self,
-        message_publisher: Optional[IMessagePublisher] = None,
-        config: Optional[ArxivFetcherConfig] = None,
+        message_publisher: IMessagePublisher | None = None,
+        config: ArxivFetcherConfig | None = None,
     ):
         """Initialize message publisher.
         
@@ -75,37 +73,37 @@ class ArxivMessagePublisher:
         self._publisher = message_publisher
         self.config = config or ArxivFetcherConfig()
         self._initialized = False
-        
+
         # Queue names from config
         self.discovered_queue = self.config.discovered_queue
         self.parse_request_queue = self.config.parse_request_queue
         self.extracted_queue = self.config.extracted_queue
-        
+
         # Statistics
         self._published_count = 0
         self._error_count = 0
-    
+
     async def initialize(self) -> None:
         """Initialize publisher connection."""
         if self._initialized:
             return
-        
+
         if self._publisher is None:
             raise MessagePublishingError(
                 "No message publisher provided. "
                 "Inject an IMessagePublisher (e.g., MockMessagePublisher) for testing."
             )
-        
+
         self._initialized = True
         logger.info(
             f"ArxivMessagePublisher initialized, "
             f"queues: {self.discovered_queue}, {self.parse_request_queue}, {self.extracted_queue}"
         )
-    
+
     async def publish_discovered(
         self,
-        papers: List[PaperMetadata],
-        correlation_id: Optional[str] = None,
+        papers: list[PaperMetadata],
+        correlation_id: str | None = None,
     ) -> int:
         """Publish discovered papers to arxiv.discovered queue.
         
@@ -121,42 +119,42 @@ class ArxivMessagePublisher:
         """
         if not self._initialized:
             await self.initialize()
-        
+
         if not papers:
             return 0
-        
+
         if self._publisher is None:
             logger.warning("No message publisher, skipping publish")
             return 0
-        
+
         published = 0
-        
+
         for paper in papers:
             try:
                 message = self._build_discovered_message(paper, correlation_id)
-                
+
                 await self._publisher.publish(
                     message=message,
                     routing_key=self.discovered_queue,
                 )
-                
+
                 published += 1
                 self._published_count += 1
-                
+
                 logger.debug(f"Published discovered paper: {paper.paper_id}")
-                
+
             except Exception as e:
                 self._error_count += 1
                 logger.error(
                     f"Failed to publish discovered paper {paper.paper_id}: {e}"
                 )
                 continue
-        
+
         logger.info(
             f"Published {published}/{len(papers)} papers to {self.discovered_queue}"
         )
         return published
-    
+
     async def publish_parse_request(
         self,
         paper_id: str,
@@ -164,8 +162,8 @@ class ArxivMessagePublisher:
         correlation_id: str,
         original_correlation_id: str,
         priority: int = 5,
-        relevance_score: Optional[float] = None,
-        intelligence_notes: Optional[str] = None,
+        relevance_score: float | None = None,
+        intelligence_notes: str | None = None,
     ) -> None:
         """Publish a parse request to arxiv.parse_request queue.
         
@@ -183,11 +181,11 @@ class ArxivMessagePublisher:
         """
         if not self._initialized:
             await self.initialize()
-        
+
         if self._publisher is None:
             logger.warning("No message publisher, skipping publish")
             return
-        
+
         try:
             message = ArxivParseRequestMessage(
                 correlation_id=correlation_id,
@@ -198,16 +196,16 @@ class ArxivMessagePublisher:
                 relevance_score=relevance_score,
                 intelligence_notes=intelligence_notes,
             )
-            
+
             await self._publisher.publish(
                 message=message,
                 routing_key=self.parse_request_queue,
             )
-            
+
             logger.info(
                 f"Published parse request for {paper_id} (priority: {priority})"
             )
-            
+
         except Exception as e:
             self._error_count += 1
             logger.error(f"Failed to publish parse request for {paper_id}: {e}")
@@ -218,7 +216,7 @@ class ArxivMessagePublisher:
                 correlation_id=correlation_id,
                 original=e,
             )
-    
+
     async def publish_extracted(
         self,
         paper: PaperMetadata,
@@ -239,11 +237,11 @@ class ArxivMessagePublisher:
         """
         if not self._initialized:
             await self.initialize()
-        
+
         if self._publisher is None:
             logger.warning("No message publisher, skipping publish")
             return
-        
+
         try:
             message = ArxivExtractedMessage(
                 correlation_id=parse_correlation_id,
@@ -265,15 +263,15 @@ class ArxivMessagePublisher:
                 figure_captions=content.figure_captions,
                 extraction_metadata=content.metadata,
             )
-            
+
             await self._publisher.publish(
                 message=message,
                 routing_key=self.extracted_queue,
             )
-            
+
             self._published_count += 1
             logger.info(f"Published extracted paper: {paper.paper_id}")
-            
+
         except Exception as e:
             self._error_count += 1
             logger.error(f"Failed to publish extracted paper {paper.paper_id}: {e}")
@@ -284,11 +282,11 @@ class ArxivMessagePublisher:
                 correlation_id=parse_correlation_id,
                 original=e,
             )
-    
+
     async def publish_batch_discovered(
         self,
-        papers: List[PaperMetadata],
-        correlation_id: Optional[str] = None,
+        papers: list[PaperMetadata],
+        correlation_id: str | None = None,
         batch_size: int = 10,
     ) -> int:
         """Publish papers in batches.
@@ -302,29 +300,29 @@ class ArxivMessagePublisher:
             Total papers published
         """
         total_published = 0
-        
+
         for i in range(0, len(papers), batch_size):
             batch = papers[i:i + batch_size]
             batch_id = f"{correlation_id}_batch_{i//batch_size}" if correlation_id else None
-            
+
             try:
                 published = await self.publish_discovered(batch, batch_id)
                 total_published += published
-                
+
                 # Small delay between batches to avoid overwhelming queue
                 if i + batch_size < len(papers):
                     await asyncio.sleep(0.1)
-                    
+
             except Exception as e:
                 logger.error(f"Failed to publish batch {i//batch_size}: {e}")
                 continue
-        
+
         return total_published
-    
+
     def _build_discovered_message(
         self,
         paper: PaperMetadata,
-        correlation_id: Optional[str] = None,
+        correlation_id: str | None = None,
     ) -> ArxivDiscoveredMessage:
         """Build discovered message from paper metadata."""
         return ArxivDiscoveredMessage(
@@ -345,26 +343,26 @@ class ArxivMessagePublisher:
             comments=paper.comments,
             source_query=paper.source_query,
         )
-    
+
     async def health_check(self) -> bool:
         """Check if publisher is healthy."""
         if not self._initialized or self._publisher is None:
             return False
-        
+
         try:
             return await self._publisher.health_check()
         except Exception as e:
             logger.warning(f"Publisher health check failed: {e}")
             return False
-    
+
     async def close(self) -> None:
         """Close publisher connection."""
         self._initialized = False
         if self._publisher:
             await self._publisher.close()
         logger.info("ArxivMessagePublisher closed")
-    
-    def get_stats(self) -> Dict[str, Any]:
+
+    def get_stats(self) -> dict[str, Any]:
         """Get publisher statistics."""
         return {
             "published_count": self._published_count,
@@ -379,12 +377,12 @@ class ArxivMessagePublisher:
                 "extracted": self.extracted_queue,
             },
         }
-    
+
     @property
-    def publisher(self) -> Optional[IMessagePublisher]:
+    def publisher(self) -> IMessagePublisher | None:
         """Get the underlying publisher (for testing)."""
         return self._publisher
-    
+
     def __repr__(self) -> str:
         return (
             f"ArxivMessagePublisher("

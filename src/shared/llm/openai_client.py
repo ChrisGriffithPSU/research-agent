@@ -4,12 +4,12 @@ Supports any OpenAI-compatible API endpoint with configurable
 base URL, API key, and model name via environment variables.
 """
 
+import json
 import os
 import re
 import time
-import json
-from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional, Protocol
+from abc import abstractmethod
+from typing import Any, Protocol
 
 from src.shared.exceptions.llm import LLMError, LLMProviderError
 
@@ -21,9 +21,9 @@ class LLMResponse:
         self,
         content: str,
         model: str,
-        usage: Optional[Dict[str, int]] = None,
-        latency_ms: Optional[float] = None,
-        reasoning_details: Optional[Any] = None,
+        usage: dict[str, int] | None = None,
+        latency_ms: float | None = None,
+        reasoning_details: Any | None = None,
     ):
         self.content = content
         self.model = model
@@ -45,10 +45,11 @@ class ILLMClient(Protocol):
     @abstractmethod
     async def complete(
         self,
-        prompt: str,
-        system: Optional[str] = None,
+        prompt: str | None = None,
+        system: str | None = None,
+        messages: list[dict[str, Any]] | None = None,
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Generate completion from LLM."""
@@ -90,12 +91,12 @@ class OpenAIClient:
 
     def __init__(
         self,
-        base_url: Optional[str] = None,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
-        max_retries: Optional[int] = None,
-        timeout_seconds: Optional[float] = None,
-        profile: Optional[str] = None,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        model: str | None = None,
+        max_retries: int | None = None,
+        timeout_seconds: float | None = None,
+        profile: str | None = None,
     ):
         """Initialize OpenAI client.
 
@@ -138,7 +139,7 @@ class OpenAIClient:
         )
 
     @staticmethod
-    def _normalize_profile(profile: Optional[str]) -> Optional[str]:
+    def _normalize_profile(profile: str | None) -> str | None:
         if profile is None:
             return None
         normalized = re.sub(r"[^A-Za-z0-9]+", "_", profile.strip()).strip("_").upper()
@@ -159,22 +160,28 @@ class OpenAIClient:
 
     async def complete(
         self,
-        prompt: str,
-        system: Optional[str] = None,
+        prompt: str | None = None,
+        system: str | None = None,
+        messages: list[dict[str, Any]] | None = None,
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        response_format: Optional[Dict[str, str]] = None,
+        max_tokens: int | None = None,
+        response_format: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Generate completion from LLM.
 
         Args:
-            prompt: User prompt/message
-            system: System prompt/instructions
+            prompt: User prompt/message (mutually exclusive with messages)
+            system: System prompt/instructions (ignored when messages is provided)
+            messages: Full message list for multi-turn conversations.
+                Use this when you need to pass back reasoning_details from
+                a previous response for continued reasoning.
             temperature: Sampling temperature (0-1)
             max_tokens: Maximum tokens to generate
             response_format: JSON schema for structured output
-            **kwargs: Additional API-specific arguments
+            **kwargs: Additional API-specific arguments.
+                Pass extra_body={"reasoning": {"enabled": True}} to enable
+                reasoning mode (e.g., for OpenRouter's free reasoning model).
 
         Returns:
             LLMResponse with generated content
@@ -184,31 +191,28 @@ class OpenAIClient:
         """
         start_time = time.time()
 
-        messages = []
-        if system:
-            messages.append({"role": "system", "content": system})
-        messages.append({"role": "user", "content": prompt})
+        # Build messages: either from raw list or from prompt+system
+        if messages is not None:
+            api_messages = list(messages)
+        else:
+            if prompt is None:
+                raise LLMError("Must provide either 'prompt' or 'messages'")
+            api_messages = []
+            if system:
+                api_messages.append({"role": "system", "content": system})
+            api_messages.append({"role": "user", "content": prompt})
 
         try:
-            params: Dict[str, Any] = {
+            params: dict[str, Any] = {
                 "model": self.model,
-                "messages": messages,
+                "messages": api_messages,
                 "temperature": temperature,
             }
 
+            # Only add extra_body if caller explicitly provides one
             extra_body = kwargs.pop("extra_body", None)
-            extra_body = dict(extra_body or {})
-            reasoning = extra_body.get("reasoning")
-
-            if isinstance(reasoning, dict):
-                reasoning_with_default = dict(reasoning)
-                reasoning_with_default["enabled"] = True
-                extra_body["reasoning"] = reasoning_with_default
-            else:
-                extra_body["reasoning"] = {"enabled": True}
-
-            if extra_body is not None:
-                params["extra_body"] = extra_body
+            if extra_body:
+                params["extra_body"] = dict(extra_body)
 
             if max_tokens is not None:
                 params["max_tokens"] = max_tokens
@@ -226,7 +230,7 @@ class OpenAIClient:
             content = self._extract_message_content(message)
             reasoning_details = getattr(message, "reasoning_details", None)
 
-            usage: Dict[str, int] = {}
+            usage: dict[str, int] = {}
             if response.usage is not None:
                 usage = {
                     "prompt_tokens": response.usage.prompt_tokens,
@@ -242,6 +246,8 @@ class OpenAIClient:
                 reasoning_details=reasoning_details,
             )
 
+        except LLMProviderError:
+            raise
         except Exception as e:
             raise LLMProviderError(
                 message=f"LLM completion failed: {str(e)}",
@@ -259,7 +265,7 @@ class OpenAIClient:
             return content
 
         if isinstance(content, list):
-            text_parts: List[str] = []
+            text_parts: list[str] = []
             for part in content:
                 if isinstance(part, str):
                     text_parts.append(part)
@@ -293,7 +299,7 @@ class OpenAIClient:
         except Exception:
             return False
 
-    def get_model_info(self) -> Dict[str, Any]:
+    def get_model_info(self) -> dict[str, Any]:
         """Get information about the configured model.
 
         Returns:

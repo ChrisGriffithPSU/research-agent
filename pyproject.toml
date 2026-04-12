@@ -29,8 +29,11 @@ dependencies = [
     # API layer
     "fastapi>=0.115.0",
 
-    # NOTE: PDF processing deps live in the `arxiv` extra to avoid
-    # dependency conflicts with the Kimi runtime (pillow pins).
+    # LLM client
+    "openai>=1.7.0",
+
+    # PDF processing
+    "docling>=2.59.0",
 
     # Utilities
     "python-dotenv>=1.0.0",
@@ -38,21 +41,6 @@ dependencies = [
     "typer>=0.9.0",
     "rich>=13.7.0",
     "aioschedule>=0.5.0",
-
-    # NOTE: Kimi runtime deps live in the `main` extra.
-]
-
-[project.optional-dependencies]
-# ArXiv fetcher isolated environment (docling/pillow constrained)
-arxiv = [
-    "docling>=2.59.0",
-]
-
-# Everything else (Kimi runtime, etc.)
-main = [
-    "kimi-agent-sdk>=0.0.4",
-    "openai>=1.7.0",
-    "pykaos>=0.7.0",
 ]
 
 [build-system]
@@ -60,15 +48,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/shared", "src/workers", "src/services/fetchers/arxiv", "workers"]
+packages = ["src/shared", "src/workers", "src/services/fetchers/arxiv"]
 
 [tool.uv]
-conflicts = [
-    [
-        { extra = "arxiv" },
-        { extra = "main" },
-    ],
-]
 dev-dependencies = [
     "pytest>=7.4.0",
     "pytest-asyncio>=0.21.0",

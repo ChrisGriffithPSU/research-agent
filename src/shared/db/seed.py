@@ -4,16 +4,8 @@ Populates database with initial data for development and testing.
 """
 import asyncio
 import logging
-from datetime import datetime, timezone
 
 from src.shared.db.session import DatabaseSession
-from src.shared.models import (
-    FetcherStatus,
-    FetcherState,
-    Source,
-    SystemState,
-    UserProfile,
-)
 from src.shared.repositories import (
     FetcherStateRepository,
     SystemStateRepository,

@@ -3,9 +3,10 @@
 Defines data structures for paper metadata and parsed content.
 """
 from datetime import datetime
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
 from enum import Enum
+from typing import Any
+
+from pydantic import BaseModel, Field
 
 
 class PaperSource(str, Enum):
@@ -40,20 +41,20 @@ class PaperMetadata(BaseModel):
     version: str = Field(default="v1", description="Version (v1, v2, etc.)")
     title: str = Field(..., description="Paper title")
     abstract: str = Field(default="", description="Paper abstract")
-    authors: List[str] = Field(default_factory=list, description="Author names")
-    categories: List[str] = Field(
+    authors: list[str] = Field(default_factory=list, description="Author names")
+    categories: list[str] = Field(
         default_factory=list,
         description="Primary categories (e.g., ['cs.LG', 'stat.ML'])"
     )
-    subcategories: List[str] = Field(
+    subcategories: list[str] = Field(
         default_factory=list,
         description="All subcategories paper appears in"
     )
     submitted_date: str = Field(default="", description="Original submission date")
-    updated_date: Optional[str] = Field(None, description="Last update date")
-    doi: Optional[str] = Field(None, description="DOI if available")
-    journal_ref: Optional[str] = Field(None, description="Journal reference")
-    comments: Optional[str] = Field(None, description="Author comments")
+    updated_date: str | None = Field(None, description="Last update date")
+    doi: str | None = Field(None, description="DOI if available")
+    journal_ref: str | None = Field(None, description="Journal reference")
+    comments: str | None = Field(None, description="Author comments")
     pdf_url: str = Field(default="", description="Direct URL to PDF")
     arxiv_url: str = Field(default="", description="URL to arXiv abstract page")
     source: PaperSource = Field(
@@ -61,23 +62,23 @@ class PaperMetadata(BaseModel):
         description="How the paper was discovered"
     )
     source_query: str = Field(default="", description="Query that found this paper")
-    relevance_score: Optional[float] = Field(
+    relevance_score: float | None = Field(
         None,
         ge=0.0,
         le=1.0,
         description="LLM-assigned relevance score"
     )
-    
+
     def __hash__(self):
         """Make hashable for deduplication."""
         return hash(self.paper_id)
-    
+
     def __eq__(self, other):
         """Equality based on paper ID."""
         if isinstance(other, PaperMetadata):
             return self.paper_id == other.paper_id
         return False
-    
+
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()
@@ -97,23 +98,23 @@ class ParsedContent(BaseModel):
     """
     paper_id: str = Field(..., description="arXiv ID this content belongs to")
     text_content: str = Field(default="", description="Full text extracted from PDF")
-    tables: List[Dict[str, Any]] = Field(
+    tables: list[dict[str, Any]] = Field(
         default_factory=list,
         description="Extracted tables with captions and data"
     )
-    equations: List[str] = Field(
+    equations: list[str] = Field(
         default_factory=list,
         description="LaTeX equations found in the PDF"
     )
-    figure_captions: List[Dict[str, str]] = Field(
+    figure_captions: list[dict[str, str]] = Field(
         default_factory=list,
         description="Figure captions and their IDs"
     )
-    metadata: Dict[str, Any] = Field(
+    metadata: dict[str, Any] = Field(
         default_factory=dict,
         description="Additional extraction metadata"
     )
-    
+
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()
@@ -130,7 +131,7 @@ class QueryExpansion(BaseModel):
         cache_hit: Whether this was a cache hit
     """
     original_query: str = Field(..., description="The original query")
-    expanded_queries: List[str] = Field(
+    expanded_queries: list[str] = Field(
         default_factory=list,
         description="List of expanded query strings"
     )
@@ -142,7 +143,7 @@ class QueryExpansion(BaseModel):
         default=False,
         description="Whether this was a cache hit"
     )
-    
+
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()
@@ -160,14 +161,14 @@ class TableData(BaseModel):
         col_count: Number of columns
         page_number: Page number where table appears
     """
-    caption: Optional[str] = Field(None, description="Table caption")
-    headers: List[str] = Field(default_factory=list, description="Column headers")
-    rows: List[List[str]] = Field(default_factory=list, description="Table rows")
+    caption: str | None = Field(None, description="Table caption")
+    headers: list[str] = Field(default_factory=list, description="Column headers")
+    rows: list[list[str]] = Field(default_factory=list, description="Table rows")
     row_count: int = Field(default=0, description="Number of data rows")
     col_count: int = Field(default=0, description="Number of columns")
     page_number: int = Field(default=0, description="Page number")
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for caching."""
         return {
             "caption": self.caption,
@@ -191,9 +192,9 @@ class FigureData(BaseModel):
     figure_id: str = Field(default="", description="Unique figure identifier")
     caption: str = Field(default="", description="Figure caption")
     page_number: int = Field(default=0, description="Page number")
-    alt_text: Optional[str] = Field(None, description="Alternative text")
-    
-    def to_dict(self) -> Dict[str, str]:
+    alt_text: str | None = Field(None, description="Alternative text")
+
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for storage."""
         return {
             "figure_id": self.figure_id,

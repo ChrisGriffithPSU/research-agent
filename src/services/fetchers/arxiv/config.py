@@ -3,8 +3,8 @@
 All parameters are easily configurable with sensible defaults.
 Integrates with existing config patterns from src/shared/utils/config/
 """
-from typing import List, Optional
 from pathlib import Path
+
 from pydantic import BaseModel, Field
 
 
@@ -45,15 +45,15 @@ class ArxivFetcherConfig(BaseModel):
         tracing_enabled: Enable distributed tracing
         log_level: Logging level
     """
-    
+
     # ==================== Categories ====================
-    categories: List[str] = Field(
+    categories: list[str] = Field(
         default=[
             # Machine Learning
             "cs.LG", "cs.AI", "cs.TF", "cs.CL", "cs.CV",
             "stat.ML", "stat.TH", "stat.ME", "stat.CO",
             # Quantitative Finance
-            "q-fin.TR", "q-fin.CP", "q-fin.GN", "q-fin.MF", 
+            "q-fin.TR", "q-fin.CP", "q-fin.GN", "q-fin.MF",
             "q-fin.PM", "q-fin.ST", "q-fin.RM",
             # Mathematics
             "math.ST", "math.PR", "math.DS", "math.OC",
@@ -62,7 +62,7 @@ class ArxivFetcherConfig(BaseModel):
         ],
         description="arXiv categories to monitor (all ML, finance, math relevant)"
     )
-    
+
     # ==================== Queues ====================
     discovered_queue: str = Field(
         default="arxiv.discovered",
@@ -76,7 +76,7 @@ class ArxivFetcherConfig(BaseModel):
         default="content.extracted",
         description="Queue for fully extracted papers"
     )
-    
+
     # ==================== Rate Limiting ====================
     rate_limit_requests_per_second: float = Field(
         default=0.33,  # 1 request per 3 seconds
@@ -86,7 +86,7 @@ class ArxivFetcherConfig(BaseModel):
         default=3,
         description="Maximum concurrent category fetches"
     )
-    
+
     # ==================== Pagination ====================
     max_results_per_query: int = Field(
         default=200,
@@ -96,7 +96,7 @@ class ArxivFetcherConfig(BaseModel):
         default=50,
         description="Default results to fetch per query"
     )
-    
+
     # ==================== PDF Processing ====================
     pdf_download_timeout: int = Field(
         default=60,
@@ -126,7 +126,7 @@ class ArxivFetcherConfig(BaseModel):
         default=True,
         description="Enable table cell matching when table extraction is on"
     )
-    
+
     # ==================== Caching ====================
     cache_enabled: bool = Field(
         default=True,
@@ -140,7 +140,7 @@ class ArxivFetcherConfig(BaseModel):
         default="redis://localhost:6379/0",
         description="Redis connection URL"
     )
-    disk_cache_dir: Optional[Path] = Field(
+    disk_cache_dir: Path | None = Field(
         default=Path("/data/arxiv_cache"),
         description="Directory for disk cache"
     )
@@ -160,7 +160,7 @@ class ArxivFetcherConfig(BaseModel):
         default=300,
         description="TTL for query expansion cache (5 minutes)"
     )
-    
+
     # ==================== LLM Query Processing ====================
     llm_query_enabled: bool = Field(
         default=True,
@@ -182,7 +182,7 @@ class ArxivFetcherConfig(BaseModel):
         default=5,
         description="Maximum number of query variations to generate"
     )
-    
+
     # ==================== Queue Publishing ====================
     batch_size: int = Field(
         default=10,
@@ -196,7 +196,7 @@ class ArxivFetcherConfig(BaseModel):
         default=1.0,
         description="Base delay for publish retries"
     )
-    
+
     # ==================== Observability ====================
     metrics_enabled: bool = Field(
         default=True,
@@ -210,7 +210,7 @@ class ArxivFetcherConfig(BaseModel):
         default="INFO",
         description="Logging level"
     )
-    
+
     class Config:
         json_encoders = {
             Path: lambda v: str(v)
@@ -218,7 +218,7 @@ class ArxivFetcherConfig(BaseModel):
 
 
 # Global config instance
-_config: Optional[ArxivFetcherConfig] = None
+_config: ArxivFetcherConfig | None = None
 
 
 def get_config() -> ArxivFetcherConfig:
@@ -265,6 +265,6 @@ def load_config_from_file(config_path: Path) -> ArxivFetcherConfig:
         ArxivFetcherConfig instance
     """
     import yaml
-    with open(config_path, 'r') as f:
+    with open(config_path) as f:
         config_dict = yaml.safe_load(f)
     return ArxivFetcherConfig(**config_dict)

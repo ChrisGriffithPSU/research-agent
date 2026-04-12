@@ -8,14 +8,13 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-from src.workers.shared.base_worker import BaseWorker, WorkerConfig
-from src.workers.shared.message_schemas import NotificationRequest
 from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.publisher import MessagePublisher
 from src.shared.storage.artifact_store import LocalArtifactStore
-
+from src.workers.shared.base_worker import BaseWorker, WorkerConfig
+from src.workers.shared.message_schemas import NotificationRequest
 
 logger = logging.getLogger(__name__)
 
@@ -43,11 +42,11 @@ class SlackNotifierWorker(BaseWorker):
         self,
         message_consumer: MessageConsumer,
         message_publisher: MessagePublisher,
-        artifact_store: Optional[LocalArtifactStore] = None,
-        config: Optional[WorkerConfig] = None,
-        webhook_url: Optional[str] = None,
-        bot_token: Optional[str] = None,
-        channel: Optional[str] = None,
+        artifact_store: LocalArtifactStore | None = None,
+        config: WorkerConfig | None = None,
+        webhook_url: str | None = None,
+        bot_token: str | None = None,
+        channel: str | None = None,
     ):
         """Initialize Slack notifier worker.
 
@@ -107,7 +106,7 @@ class SlackNotifierWorker(BaseWorker):
             for plot_path in message.plots:
                 await self._upload_plot(plot_path, message.title)
 
-    def _format_message(self, message: NotificationRequest) -> Dict[str, Any]:
+    def _format_message(self, message: NotificationRequest) -> dict[str, Any]:
         """Format notification for Slack.
 
         Args:
@@ -212,7 +211,7 @@ class SlackNotifierWorker(BaseWorker):
             "channel": self.channel,
         }
 
-    async def _send_to_slack(self, message: Dict[str, Any]) -> None:
+    async def _send_to_slack(self, message: dict[str, Any]) -> None:
         """Send message to Slack webhook.
 
         Args:

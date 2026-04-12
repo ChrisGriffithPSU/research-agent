@@ -1,7 +1,6 @@
 """RabbitMQ configuration and connection URL management."""
 
 import logging
-from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -40,7 +39,7 @@ class MessagingConfig(BaseSettings):
     queue_max_length: int = Field(
         default=10000, description="Default maximum queue length (0 for unlimited)"
     )
-    queue_message_ttl: Optional[int] = Field(
+    queue_message_ttl: int | None = Field(
         default=86400000,  # 24 hours in milliseconds
         description="Default message TTL in milliseconds (None for no expiration)",
     )
@@ -99,7 +98,7 @@ class MessagingConfig(BaseSettings):
 
     @field_validator("queue_message_ttl")
     @classmethod
-    def validate_queue_message_ttl(cls, v: Optional[int]) -> Optional[int]:
+    def validate_queue_message_ttl(cls, v: int | None) -> int | None:
         """Validate queue message TTL is positive if set."""
         if v is not None and v <= 0:
             raise ValueError("queue_message_ttl must be > 0")

@@ -7,42 +7,26 @@ Produces hypothesis trees with falsifiable experiments for MFT research.
 import json
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from src.shared.llm.openai_client import OpenAIClient
-from src.workers.shared.base_worker import BaseWorker, WorkerConfig
-from src.workers.shared.message_schemas import (
-    ConceptsGenerated,
-    ConceptObject,
-    PlanGenerated,
-    NotificationRequest,
-)
 from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.publisher import MessagePublisher
 from src.shared.storage.artifact_store import LocalArtifactStore
-
 from src.workers.experiment_exploder.plan_schema import coerce_plan
-
+from src.workers.shared.base_worker import BaseWorker, WorkerConfig
+from src.workers.shared.message_schemas import (
+    ConceptsGenerated,
+    NotificationRequest,
+    PlanGenerated,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class ExperimentExploderWorker(BaseWorker):
-    """Worker that explodes concepts into experiment plans.
+    """Worker that explodes concepts into experiment plans."""
 
-    Takes concept objects and generates hypothesis trees with
-    testable experiment specifications for MFT research.
-
-    Example:
-        llm = OpenAIClient()
-        consumer = MessageConsumer(connection)
-        publisher = MessagePublisher(connection)
-
-        worker = ExperimentExploderWorker(llm, consumer, publisher)
-        await worker.start()
-    """
-
-    # Load system prompt from file
     SYSTEM_PROMPT = (
         Path(__file__).parent.parent.parent / "shared" / "llm" / "prompts" / "experiment-agent.txt"
     )
@@ -52,26 +36,13 @@ class ExperimentExploderWorker(BaseWorker):
         llm_client: OpenAIClient,
         message_consumer: MessageConsumer,
         message_publisher: MessagePublisher,
-        artifact_store: Optional[LocalArtifactStore] = None,
-        config: Optional[WorkerConfig] = None,
+        artifact_store: LocalArtifactStore | None = None,
+        config: WorkerConfig | None = None,
         max_experiments_per_concept: int = 5,
         max_total_experiments: int = 20,
         holding_time_min: int = 5,
         holding_time_max: int = 30,
     ):
-        """Initialize experiment exploder worker.
-
-        Args:
-            llm_client: LLM client for experiment generation
-            message_consumer: Message consumer for input queue
-            message_publisher: Publisher for output messages
-            artifact_store: Artifact storage
-            config: Worker configuration
-            max_experiments_per_concept: Max experiments per concept
-            max_total_experiments: Max total experiments
-            holding_time_min: Minimum holding time in seconds
-            holding_time_max: Maximum holding time in seconds
-        """
         config = config or WorkerConfig(
             queue_name="plan.generate.request",
             dlq_name="plan.generate.dlq",
@@ -93,11 +64,6 @@ class ExperimentExploderWorker(BaseWorker):
         self._system_prompt = self._load_system_prompt()
 
     def _load_system_prompt(self) -> str:
-        """Load system prompt from file.
-
-        Returns:
-            System prompt text
-        """
         try:
             return self.SYSTEM_PROMPT.read_text(encoding="utf-8")
         except Exception as e:
@@ -108,26 +74,17 @@ class ExperimentExploderWorker(BaseWorker):
             )
 
     def get_message_type(self):
-        """Get expected message type."""
         return ConceptsGenerated
 
     async def process(self, message: ConceptsGenerated) -> None:
-        """Process a concept generation result.
-
-        Args:
-            message: Concepts generated from paper
-        """
         logger.info(
             f"Exploding {len(message.concept_objects)} concepts for paper: {message.paper_id}"
         )
 
-        # Prepare input for LLM
         llm_input = self._prepare_llm_input(message)
-
-        # Generate experiment plan
         plan_data = await self._generate_plan(llm_input)
 
-        # Best-effort shape validation (do not fail the worker on schema drift)
+        # Best-effort shape validation
         plan_model = coerce_plan(plan_data)
         if plan_model is None:
             logger.warning("Experiment plan did not validate against expected schema")
@@ -145,11 +102,10 @@ class ExperimentExploderWorker(BaseWorker):
             content_type="application/json",
         )
 
-        # Publish notification that plan is ready
+        # Publish notification
         notification = NotificationRequest(
             work_id=message.work_id,
             parent_work_id=message.parent_work_id,
-            experiment_id=None,
             paper_id=message.paper_id,
             status="INFO",
             title=f"Experiment Plan Generated for {message.paper_id}",
@@ -159,12 +115,10 @@ class ExperimentExploderWorker(BaseWorker):
                 f"experiments from {len(message.concept_objects)} concepts"
             ),
             artifact_refs=[artifact_path, message.concepts_json_path],
-            recommendation=None,
         )
-
         await self.publish("notify.send", notification)
 
-        # Publish plan generated message (for future coding agent)
+        # Publish plan generated message for code executor
         plan_generated = PlanGenerated(
             work_id=message.work_id,
             parent_work_id=message.parent_work_id,
@@ -178,18 +132,7 @@ class ExperimentExploderWorker(BaseWorker):
         logger.info(f"Experiment plan generated for: {message.paper_id}")
 
     def _prepare_llm_input(self, message: ConceptsGenerated) -> str:
-        """Prepare LLM input from message.
-
-        Args:
-            message: Concepts generated
-
-        Returns:
-            JSON string for LLM
-        """
-        # Convert concept objects to dicts
-        concept_dicts = []
-        for concept in message.concept_objects:
-            concept_dicts.append(concept.model_dump())
+        concept_dicts = [concept.model_dump() for concept in message.concept_objects]
 
         input_data = {
             "batch_id": message.work_id,
@@ -217,32 +160,19 @@ class ExperimentExploderWorker(BaseWorker):
 
         return json.dumps(input_data, indent=2)
 
-    async def _generate_plan(self, llm_input: str) -> Dict[str, Any]:
-        """Generate experiment plan using LLM.
-
-        Args:
-            llm_input: JSON input for LLM
-
-        Returns:
-            Parsed plan dict
-        """
+    async def _generate_plan(self, llm_input: str) -> dict[str, Any]:
         try:
             response = await self.llm.complete(
                 prompt=llm_input,
                 system=self._system_prompt,
                 temperature=0.4,
-                max_tokens=6000,  # Large output for complex plans
+                max_tokens=6000,
                 response_format={"type": "json_object"},
             )
-
-            # Parse JSON response
             result = json.loads(response.content)
-
             return result
-
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse LLM response as JSON: {e}")
-            # Return minimal valid structure
             return {
                 "batch_id": "error",
                 "experiment_packages": [],
@@ -253,11 +183,9 @@ class ExperimentExploderWorker(BaseWorker):
                     "error": f"Parse error: {str(e)}",
                 },
             }
-
         except Exception as e:
             logger.error(f"LLM call failed: {e}")
             raise
 
     async def health_check(self) -> bool:
-        """Check worker health."""
         return await self.llm.health_check()

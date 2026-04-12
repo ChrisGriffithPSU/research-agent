@@ -1,10 +1,9 @@
 """RabbitMQ connection management."""
 import asyncio
 import logging
-from typing import Optional, Dict
+from typing import Optional
 
 import aio_pika
-
 from src.shared.messaging.config import MessagingConfig
 from src.shared.messaging.exceptions import ConnectionError
 
@@ -19,7 +18,7 @@ class RabbitMQConnection:
     """
 
     _instance: Optional["RabbitMQConnection"] = None
-    _config: Optional[MessagingConfig] = None
+    _config: MessagingConfig | None = None
 
     def __init__(self, config: MessagingConfig):
         """Initialize RabbitMQ connection.
@@ -28,10 +27,10 @@ class RabbitMQConnection:
             config: Messaging configuration
         """
         self._config = config
-        self._connection: Optional[aio_pika.RobustConnection] = None
-        self._channel: Optional[aio_pika.RobustChannel] = None
+        self._connection: aio_pika.RobustConnection | None = None
+        self._channel: aio_pika.RobustChannel | None = None
         self._is_connected = False
-        self._reconnect_task: Optional[asyncio.Task] = None
+        self._reconnect_task: asyncio.Task | None = None
 
     async def connect(self) -> None:
         """Establish connection to RabbitMQ.
@@ -215,7 +214,7 @@ class RabbitMQConnection:
 
         return self._channel
 
-    async def get_queue_info(self, queue_name: str) -> Optional[Dict[str, int]]:
+    async def get_queue_info(self, queue_name: str) -> dict[str, int] | None:
         """Get information about a queue.
 
         Args:
@@ -386,10 +385,10 @@ class ChannelTransaction:
 
 # Global connection singleton
 _connection_lock = asyncio.Lock()
-_global_connection: Optional[RabbitMQConnection] = None
+_global_connection: RabbitMQConnection | None = None
 
 
-async def get_connection(config: Optional[MessagingConfig] = None) -> RabbitMQConnection:
+async def get_connection(config: MessagingConfig | None = None) -> RabbitMQConnection:
     """Get or create global RabbitMQ connection.
 
     Args:

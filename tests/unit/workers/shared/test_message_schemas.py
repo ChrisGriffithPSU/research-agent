@@ -3,17 +3,20 @@
 from __future__ import annotations
 
 from src.workers.shared.message_schemas import (
-    ConceptGenerationRequest,
     ConceptsGenerated,
     NotificationRequest,
-    PaperTriageDecision,
-    PaperTriageRequest,
+    PaperFullTextRequest,
+    ParsedPaper,
     PlanGenerated,
+    CodeExecutionRequest,
+    CodeExecutionResult,
+    ExperimentEvaluationRequest,
+    ExperimentEvaluationResult,
 )
 
 
-def test_paper_triage_request_has_defaults_and_serialized_datetime() -> None:
-    msg = PaperTriageRequest(
+def test_paper_fulltext_request_has_defaults_and_serialized_datetime() -> None:
+    msg = PaperFullTextRequest(
         paper_id="p1",
         title="title",
         abstract="abs",
@@ -25,15 +28,15 @@ def test_paper_triage_request_has_defaults_and_serialized_datetime() -> None:
     assert isinstance(payload["created_at"], str)
 
 
-def test_concept_generation_request_accepts_optional_categories() -> None:
-    msg = ConceptGenerationRequest(
+def test_parsed_paper_has_defaults() -> None:
+    msg = ParsedPaper(
         paper_id="p1",
         title="t",
         abstract="a",
         full_text="body",
-        categories=["cs.LG"],
     )
-    assert msg.categories == ["cs.LG"]
+    assert msg.sections == []
+    assert msg.categories == []
 
 
 def test_notification_request_contract() -> None:
@@ -48,12 +51,50 @@ def test_plan_generated_contract() -> None:
     assert msg.experiment_count == 3
 
 
-def test_triage_decision_confidence_bounds() -> None:
-    ok = PaperTriageDecision(paper_id="p", decision="REJECT_PAPER", confidence=0.0)
-    assert ok.confidence == 0.0
-    try:
-        PaperTriageDecision(paper_id="p", decision="REQUEST_FULL_TEXT", confidence=1.2)
-    except Exception as exc:
-        assert "confidence" in str(exc)
-    else:
-        raise AssertionError("Expected validation error for confidence > 1")
+def test_code_execution_request_defaults() -> None:
+    msg = CodeExecutionRequest(
+        paper_id="p1",
+        experiment_id="e1",
+        experiment_name="test experiment",
+        experiment_goal="test goal",
+        hypothesis_id="h1",
+        plan_json_path="/path/to/plan.json",
+    )
+    assert msg.max_fix_iterations == 5
+    assert msg.priority == 5
+
+
+def test_code_execution_result_contract() -> None:
+    msg = CodeExecutionResult(
+        paper_id="p1",
+        experiment_id="e1",
+        hypothesis_id="h1",
+        status="success",
+        stdout="ok",
+        exit_code=0,
+    )
+    assert msg.fix_iterations == 0
+    assert msg.fix_history == []
+
+
+def test_experiment_evaluation_request_contract() -> None:
+    msg = ExperimentEvaluationRequest(
+        paper_id="p1",
+        experiment_id="e1",
+        hypothesis_id="h1",
+        execution_status="success",
+    )
+    assert msg.stdout is None
+
+
+def test_experiment_evaluation_result_recommendation_values() -> None:
+    for rec in ("PROMOTE", "KILL", "INVESTIGATE", "RETRY"):
+        msg = ExperimentEvaluationResult(
+            paper_id="p1",
+            experiment_id="e1",
+            hypothesis_id="h1",
+            recommendation=rec,  # type: ignore[arg-type]
+            confidence=0.8,
+            reasoning="test",
+        )
+        assert msg.recommendation == rec

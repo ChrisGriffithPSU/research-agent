@@ -4,7 +4,7 @@ Provides a clean interface for message publishing with injectable dependencies.
 """
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import aio_pika
 
@@ -12,15 +12,13 @@ if TYPE_CHECKING:
     from src.shared.testing.mocks import MockMessageConnection, MockMessagePublisher
 
 from src.shared.interfaces import (
+    ICircuitBreaker,
     IMessageConnection,
     IRetryStrategy,
-    ICircuitBreaker,
-    IMessagePublisher,
 )
-from src.shared.messaging.schemas import BaseMessage
-from src.shared.messaging.retry import ExponentialBackoffStrategy
 from src.shared.messaging.exceptions import ConnectionError as MessagingConnectionError
-
+from src.shared.messaging.retry import ExponentialBackoffStrategy
+from src.shared.messaging.schemas import BaseMessage
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +61,12 @@ class MessagePublisher:
         _retry_strategy: Strategy for retrying failed publishes
         _circuit_breaker: Circuit breaker for fault tolerance
     """
-    
+
     def __init__(
         self,
         connection: IMessageConnection,
-        retry_strategy: Optional[IRetryStrategy] = None,
-        circuit_breaker: Optional[ICircuitBreaker] = None,
+        retry_strategy: IRetryStrategy | None = None,
+        circuit_breaker: ICircuitBreaker | None = None,
         persistent: bool = True,
         confirm_mode: bool = True,
     ):
@@ -86,7 +84,7 @@ class MessagePublisher:
         self._circuit_breaker = circuit_breaker
         self._persistent = persistent
         self._confirm_mode = confirm_mode
-    
+
     async def publish(
         self,
         message: BaseMessage,
@@ -108,14 +106,14 @@ class MessagePublisher:
         """
         if not self._connection.is_connected:
             raise MessagingConnectionError("Not connected to message broker. Call connection.connect() first.")
-        
+
         # Serialize message
         try:
             message_json = message.model_dump_json()
             message_bytes = message_json.encode("utf-8")
         except Exception as e:
-            raise PublishError(f"Message serialization failed", original=e) from e
-        
+            raise PublishError("Message serialization failed", original=e) from e
+
         # Publish with retry and circuit breaker
         await self._publish_with_retry(
             message_bytes,
@@ -123,7 +121,7 @@ class MessagePublisher:
             mandatory,
             immediate,
         )
-    
+
     async def _publish_with_retry(
         self,
         message_bytes: bytes,
@@ -141,7 +139,7 @@ class MessagePublisher:
         """
         attempt = 0
         last_error = None
-        
+
         while True:
             try:
                 if self._circuit_breaker:
@@ -159,32 +157,32 @@ class MessagePublisher:
                         mandatory,
                         immediate,
                     )
-                
+
                 logger.info(f"Published message to {routing_key}")
                 return
-                
+
             except Exception as e:
                 last_error = e
                 attempt += 1
-                
+
                 # Check if should retry
                 should_retry = await self._retry_strategy.should_retry(attempt, e)
-                
+
                 if not should_retry:
                     # All retries exhausted or permanent error
                     raise PublishError(
                         f"Failed to publish to {routing_key} after {attempt} attempts",
                         original=e,
                     ) from e
-                
+
                 # Backoff and retry
                 backoff = self._retry_strategy.get_backoff(attempt)
                 logger.warning(
                     f"Publish attempt {attempt} failed, retrying in {backoff:.2f}s: {e}"
                 )
-                
+
                 await asyncio.sleep(backoff)
-    
+
     async def _do_publish(
         self,
         message_bytes: bytes,
@@ -286,7 +284,7 @@ class MessagePublisher:
                 delivery_mode=delivery_mode,
             )
             # Transaction commits on exit from context manager
-    
+
     async def health_check(self) -> bool:
         """Check if publisher is healthy.
         
@@ -299,22 +297,22 @@ class MessagePublisher:
             return self._connection.is_connected
         except Exception:
             return False
-    
+
     async def close(self) -> None:
         """Close publisher and connection."""
         await self._connection.close()
         logger.info("MessagePublisher closed")
-    
+
     @property
     def connection(self) -> IMessageConnection:
         """Get the underlying connection (for testing)."""
         return self._connection
-    
+
     @property
-    def circuit_breaker(self) -> Optional[ICircuitBreaker]:
+    def circuit_breaker(self) -> ICircuitBreaker | None:
         """Get the circuit breaker (for testing)."""
         return self._circuit_breaker
-    
+
     def __repr__(self) -> str:
         return (
             f"MessagePublisher(connected={self._connection.is_connected}, "
@@ -327,7 +325,7 @@ class MessagePublisherFactory:
     
     Provides convenient methods for creating publishers with common configurations.
     """
-    
+
     @staticmethod
     def create_rabbitmq(
         connection_string: str = "amqp://localhost:5672/",
@@ -348,27 +346,27 @@ class MessagePublisherFactory:
         Returns:
             Configured MessagePublisher instance
         """
-        from src.shared.messaging.connection import RabbitMQConnection
         from src.shared.messaging.circuit_breaker import CircuitBreaker
-        
+        from src.shared.messaging.connection import RabbitMQConnection
+
         connection = RabbitMQConnection(connection_string=connection_string)
-        
+
         retry_strategy = ExponentialBackoffStrategy(
             max_retries=max_retries,
             base_delay=base_delay,
         )
-        
+
         circuit_breaker = CircuitBreaker(
             failure_threshold=failure_threshold,
             timeout=timeout,
         )
-        
+
         return MessagePublisher(
             connection=connection,
             retry_strategy=retry_strategy,
             circuit_breaker=circuit_breaker,
         )
-    
+
     @staticmethod
     def create_null() -> 'NullMessagePublisher':
         """Create null publisher that does nothing.
@@ -379,7 +377,7 @@ class MessagePublisherFactory:
             NullMessagePublisher instance
         """
         return NullMessagePublisher()
-    
+
     @staticmethod
     def create_mock(
         connection: Optional['MockMessageConnection'] = None,
@@ -392,7 +390,7 @@ class MessagePublisherFactory:
         Returns:
             MockMessagePublisher instance
         """
-        from src.shared.testing.mocks import MockMessageConnection, MockMessagePublisher
+        from src.shared.testing.mocks import MockMessagePublisher
 
         return MockMessagePublisher(connection=connection)
 
@@ -407,7 +405,7 @@ class NullMessagePublisher:
         publisher = NullMessagePublisher()
         await publisher.publish(MyMessage(), routing_key="test")  # Does nothing
     """
-    
+
     async def publish(
         self,
         message: Any,
@@ -416,11 +414,11 @@ class NullMessagePublisher:
     ) -> None:
         """Do nothing."""
         pass
-    
+
     async def health_check(self) -> bool:
         """Always healthy."""
         return True
-    
+
     async def close(self) -> None:
         """Do nothing."""
         pass
@@ -428,8 +426,8 @@ class NullMessagePublisher:
 
 class PublishError(Exception):
     """Raised when message publishing fails after all retries."""
-    
-    def __init__(self, message: str, original: Optional[Exception] = None):
+
+    def __init__(self, message: str, original: Exception | None = None):
         self.message = message
         self.original = original
         super().__init__(message)

@@ -6,21 +6,17 @@ Non-LLM worker - uses docling for parsing.
 """
 
 import logging
-from typing import Optional
 
-from src.services.fetchers.arxiv.services.pdf_processor import PDFProcessor
 from src.services.fetchers.arxiv.schemas.paper import ParsedContent
-from src.workers.shared.base_worker import BaseWorker, WorkerConfig
-from src.workers.shared.message_schemas import (
-    FullTextRequest,
-    ParsedPaper,
-    ConceptGenerationRequest,
-    NotificationRequest,
-)
+from src.services.fetchers.arxiv.services.pdf_processor import PDFProcessor
 from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.publisher import MessagePublisher
 from src.shared.storage.artifact_store import LocalArtifactStore
-
+from src.workers.shared.base_worker import BaseWorker, WorkerConfig
+from src.workers.shared.message_schemas import (
+    ConceptGenerationRequest,
+    PaperFullTextRequest,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,9 +39,9 @@ class PDFParserWorker(BaseWorker):
         self,
         message_consumer: MessageConsumer,
         message_publisher: MessagePublisher,
-        artifact_store: Optional[LocalArtifactStore] = None,
-        config: Optional[WorkerConfig] = None,
-        pdf_processor: Optional[PDFProcessor] = None,
+        artifact_store: LocalArtifactStore | None = None,
+        config: WorkerConfig | None = None,
+        pdf_processor: PDFProcessor | None = None,
     ):
         """Initialize PDF parser worker.
 
@@ -73,13 +69,13 @@ class PDFParserWorker(BaseWorker):
 
     def get_message_type(self):
         """Get expected message type."""
-        return FullTextRequest
+        return PaperFullTextRequest
 
-    async def process(self, message: FullTextRequest) -> None:
+    async def process(self, message: PaperFullTextRequest) -> None:
         """Process a full text request.
 
         Args:
-            message: Request with PDF URL to parse
+            message: Request with paper metadata and PDF URL
         """
         logger.info(f"Parsing PDF for paper: {message.paper_id}")
 
@@ -89,35 +85,17 @@ class PDFParserWorker(BaseWorker):
         # Store parsed content artifact
         await self._store_parsed_content(parsed, message.paper_id)
 
-        # Create parsed paper message
-        parsed_paper = ParsedPaper(
-            work_id=message.work_id,
-            parent_work_id=message.parent_work_id,
-            paper_id=message.paper_id,
-            title=parsed.metadata.get("title", ""),
-            abstract="",  # Will be filled from triage request
-            authors=[],
-            full_text=parsed.text_content,
-            sections=self._extract_sections(parsed),
-            artifact_refs=[
-                f"{message.paper_id}/parsed/full_text.txt",
-            ],
-        )
-
-        # Publish parsed paper
-        await self.publish("paper.parsed", parsed_paper)
-
-        # Also publish concept generation request
+        # Build and publish concept generation request
         concept_request = ConceptGenerationRequest(
             work_id=message.work_id,
             parent_work_id=message.work_id,
             paper_id=message.paper_id,
-            title=parsed.metadata.get("title", ""),
-            abstract="",  # Will be filled downstream
-            authors=[],
+            title=message.title,
+            abstract=message.abstract,
+            authors=message.authors,
             full_text=parsed.text_content,
             sections=self._extract_sections(parsed),
-            triage_context=message.triage_decision,
+            categories=message.categories,
             artifact_refs=[
                 f"{message.paper_id}/parsed/full_text.txt",
             ],
@@ -192,14 +170,16 @@ class PDFParserWorker(BaseWorker):
         Returns:
             List of section dicts
         """
-        # Simple heuristic: split by common section headers
+        import re
+
         sections = []
         text = parsed.text_content
 
         # Common section patterns
-        import re
-
-        section_pattern = r"(?:\n|^)(Abstract|Introduction|Background|Related Work|Methods?|Methodology|Experiments?|Results?|Discussion|Conclusion|References)\s*\n"
+        section_pattern = (
+            r"(?:\n|^)(Abstract|Introduction|Background|Related Work|Methods?|"
+            r"Methodology|Experiments?|Results?|Discussion|Conclusion|References)\s*\n"
+        )
 
         matches = list(re.finditer(section_pattern, text, re.IGNORECASE))
 
@@ -213,7 +193,7 @@ class PDFParserWorker(BaseWorker):
                 sections.append(
                     {
                         "heading": section_name,
-                        "text": section_text[:5000],  # Limit section length
+                        "text": section_text[:5000],
                     }
                 )
 
@@ -222,7 +202,7 @@ class PDFParserWorker(BaseWorker):
             sections.append(
                 {
                     "heading": "Full Text",
-                    "text": text[:10000],  # Limit length
+                    "text": text[:10000],
                 }
             )
 

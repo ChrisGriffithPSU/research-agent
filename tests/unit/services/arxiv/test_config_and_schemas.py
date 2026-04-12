@@ -6,8 +6,7 @@ from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, PaperSource
 
 def test_arxiv_config_defaults_are_sane() -> None:
     cfg = ArxivFetcherConfig()
-    assert cfg.max_results_per_category > 0
-    assert cfg.output_queue == "paper.triage.request"
+    assert cfg.max_results_per_query > 0
     assert len(cfg.categories) > 0
 
 

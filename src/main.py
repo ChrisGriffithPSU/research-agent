@@ -6,29 +6,24 @@ CLI for running workers, scheduler, and administrative tasks.
 import asyncio
 import logging
 import sys
-from typing import Optional, cast
+from typing import cast
 
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
 
-from src.shared.messaging.connection import RabbitMQConnection
+from src.shared.interfaces import IMessageConnection
 from src.shared.messaging.config import messaging_config
+from src.shared.messaging.connection import RabbitMQConnection
 from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.publisher import MessagePublisher
-from src.shared.interfaces import IMessageConnection
-
 
 app = typer.Typer(help="Quant Research Agent CLI")
 console = Console()
 
 
 def setup_logging(verbose: bool = False) -> None:
-    """Setup logging configuration.
-
-    Args:
-        verbose: Enable debug logging if True
-    """
+    """Setup logging configuration."""
     level = logging.DEBUG if verbose else logging.INFO
     logging.basicConfig(
         level=level,
@@ -79,7 +74,7 @@ def fetch_once(
 def worker(
     name: str = typer.Argument(
         ...,
-        help="Worker name: triage, pdf_parser, concept_gen, experiment_exploder, notifier, kimi",
+        help="Worker name: pdf_parser, concept_gen, experiment_exploder, code_executor, evaluator, notifier",
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
@@ -87,11 +82,7 @@ def worker(
     setup_logging(verbose)
 
     async def run():
-        if name == "kimi":
-            from workers.kimi_worker.mq_worker import run_queue_worker
-
-            await run_queue_worker()
-            return
+        from src.shared.llm.openai_client import OpenAIClient
 
         # Setup RabbitMQ connection
         connection = RabbitMQConnection(messaging_config)
@@ -101,30 +92,8 @@ def worker(
         consumer = MessageConsumer(connection)
         publisher = MessagePublisher(cast(IMessageConnection, connection))
 
-        # Create worker based on name
-        if name == "triage":
-            from src.workers.paper_triage.worker import PaperTriageWorker
-            try:
-                from src.shared.llm.openai_client import OpenAIClient
-            except ImportError:
-                console.print("[red]triage requires the 'main' extra (openai).[/red]")
-                console.print("Install with: uv sync --extra main")
-                raise
-
-            w = PaperTriageWorker(
-                llm_client=OpenAIClient(profile="triage"),
-                message_consumer=consumer,
-                message_publisher=publisher,
-            )
-        elif name == "pdf_parser":
-            try:
-                from src.workers.pdf_parser.worker import PDFParserWorker
-            except ImportError:
-                console.print(
-                    "[red]pdf_parser requires the 'arxiv' extra (docling).[/red]"
-                )
-                console.print("Install with: uv sync --extra arxiv")
-                raise
+        if name == "pdf_parser":
+            from src.workers.pdf_parser.worker import PDFParserWorker
 
             w = PDFParserWorker(
                 message_consumer=consumer,
@@ -132,12 +101,6 @@ def worker(
             )
         elif name == "concept_gen":
             from src.workers.concept_generator.worker import ConceptGeneratorWorker
-            try:
-                from src.shared.llm.openai_client import OpenAIClient
-            except ImportError:
-                console.print("[red]concept_gen requires the 'main' extra (openai).[/red]")
-                console.print("Install with: uv sync --extra main")
-                raise
 
             w = ConceptGeneratorWorker(
                 llm_client=OpenAIClient(profile="concept_gen"),
@@ -146,17 +109,25 @@ def worker(
             )
         elif name == "experiment_exploder":
             from src.workers.experiment_exploder.worker import ExperimentExploderWorker
-            try:
-                from src.shared.llm.openai_client import OpenAIClient
-            except ImportError:
-                console.print(
-                    "[red]experiment_exploder requires the 'main' extra (openai).[/red]"
-                )
-                console.print("Install with: uv sync --extra main")
-                raise
 
             w = ExperimentExploderWorker(
                 llm_client=OpenAIClient(profile="experiment_exploder"),
+                message_consumer=consumer,
+                message_publisher=publisher,
+            )
+        elif name == "code_executor":
+            from src.workers.code_executor.worker import CodeExecutorWorker
+
+            w = CodeExecutorWorker(
+                llm_client=OpenAIClient(profile="code_executor"),
+                message_consumer=consumer,
+                message_publisher=publisher,
+            )
+        elif name == "evaluator":
+            from src.workers.experiment_evaluator.worker import ExperimentEvaluatorWorker
+
+            w = ExperimentEvaluatorWorker(
+                llm_client=OpenAIClient(profile="evaluator"),
                 message_consumer=consumer,
                 message_publisher=publisher,
             )
@@ -170,7 +141,8 @@ def worker(
         else:
             console.print(f"[red]Unknown worker: {name}[/red]")
             console.print(
-                "Available workers: triage, pdf_parser, concept_gen, experiment_exploder, notifier, kimi"
+                "Available workers: pdf_parser, concept_gen, experiment_exploder, "
+                "code_executor, evaluator, notifier"
             )
             sys.exit(1)
 
@@ -200,19 +172,14 @@ def health_check(
         # Check LLM
         console.print("Checking LLM...", end=" ")
         try:
-            try:
-                from src.shared.llm.openai_client import OpenAIClient
-            except ImportError:
-                console.print("[yellow]SKIP[/yellow] (install with: uv sync --extra main)")
-                OpenAIClient = None  # type: ignore[assignment]
+            from src.shared.llm.openai_client import OpenAIClient
 
-            if OpenAIClient is not None:
-                llm = OpenAIClient(profile="triage")
-                healthy = await llm.health_check()
-                if healthy:
-                    console.print("[green]OK[/green]")
-                else:
-                    console.print("[red]FAIL[/red]")
+            llm = OpenAIClient(profile="triage")
+            healthy = await llm.health_check()
+            if healthy:
+                console.print("[green]OK[/green]")
+            else:
+                console.print("[red]FAIL[/red]")
         except Exception as e:
             console.print(f"[red]ERROR: {e}[/red]")
 
@@ -235,7 +202,7 @@ def health_check(
 def version() -> None:
     """Show version information."""
     console.print("[bold]Quant Research Agent[/bold]")
-    console.print("Version: 0.1.0")
+    console.print("Version: 0.2.0")
     console.print("Focus: MFT Research (5-30s holding)")
 
 

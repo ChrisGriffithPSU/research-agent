@@ -1,12 +1,11 @@
 """Generic repository base class with common CRUD operations."""
 import logging
-from typing import Any, Generic, List, Optional, Type, TypeVar
+from typing import Any, Generic, TypeVar
 
 # from pgvector.sqlalchemy import Vector
-from sqlalchemy import select, update, func
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from src.shared.exceptions import (
     DatabaseError,
     RepositoryConflictError,
@@ -27,7 +26,7 @@ class BaseRepository(Generic[ModelType]):
     Override methods as needed for specific query requirements.
     """
 
-    def __init__(self, model: Type[ModelType], session: AsyncSession):
+    def __init__(self, model: type[ModelType], session: AsyncSession):
         """Initialize repository.
 
         Args:
@@ -74,7 +73,7 @@ class BaseRepository(Generic[ModelType]):
                 f"Failed to create {self._model_name}: {e}"
             ) from e
 
-    async def get(self, id: int) -> Optional[ModelType]:
+    async def get(self, id: int) -> ModelType | None:
         """Get model instance by ID.
 
         Args:
@@ -117,9 +116,9 @@ class BaseRepository(Generic[ModelType]):
 
     async def get_all(
         self,
-        limit: Optional[int] = None,
-        offset: Optional[int] = None,
-    ) -> List[ModelType]:
+        limit: int | None = None,
+        offset: int | None = None,
+    ) -> list[ModelType]:
         """Get all model instances with optional pagination.
 
         Args:
@@ -220,8 +219,8 @@ class BaseRepository(Generic[ModelType]):
             ) from e
 
     async def list_by_field(
-        self, field_name: str, value: Any, limit: Optional[int] = None
-    ) -> List[ModelType]:
+        self, field_name: str, value: Any, limit: int | None = None
+    ) -> list[ModelType]:
         """List instances filtering by field value.
 
         Args:
@@ -294,17 +293,17 @@ class VectorSearchMixin(Generic[ModelType]):
     Provides methods for finding similar vectors using pgvector.
     """
 
-    def __init__(self, model: Type[ModelType], session: AsyncSession):
+    def __init__(self, model: type[ModelType], session: AsyncSession):
         self.model = model
         self.session = session
         self._model_name = model.__name__
 
     async def find_similar(
         self,
-        embedding: List[float],
+        embedding: list[float],
         threshold: float = 0.85,
         limit: int = 10,
-    ) -> List[ModelType]:
+    ) -> list[ModelType]:
         """Find similar vectors using cosine similarity.
 
         Args:
@@ -346,10 +345,10 @@ class VectorSearchMixin(Generic[ModelType]):
 
     async def search_by_text(
         self,
-        query_embedding: List[float],
-        filters: Optional[dict] = None,
+        query_embedding: list[float],
+        filters: dict | None = None,
         limit: int = 20,
-    ) -> List[ModelType]:
+    ) -> list[ModelType]:
         """Search by text with optional filters.
 
         Args:

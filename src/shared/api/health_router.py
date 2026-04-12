@@ -5,7 +5,6 @@ from datetime import datetime
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
-
 from src.shared.db.health import check_health, quick_check
 
 router = APIRouter(prefix="/health", tags=["health"])

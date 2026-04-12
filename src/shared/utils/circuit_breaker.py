@@ -3,11 +3,10 @@ import asyncio
 import functools
 import logging
 import time
+from collections.abc import Callable
 from enum import Enum
-from typing import Callable, Optional, Any
 
 from src.shared.exceptions import CircuitOpenError
-
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +33,7 @@ class CircuitBreaker:
         success_threshold: Number of successes in HALF_OPEN to close circuit
         circuit_name: Name for logging/metrics
     """
-    
+
     def __init__(
         self,
         failure_threshold: int = 3,
@@ -46,12 +45,12 @@ class CircuitBreaker:
         self.failure_threshold = failure_threshold
         self.timeout_seconds = timeout_seconds
         self.success_threshold = success_threshold
-        
+
         self.state = CircuitState.CLOSED
         self.failure_count = 0
         self.success_count = 0  # Only used in HALF_OPEN
-        self.opened_at: Optional[float] = None
-        
+        self.opened_at: float | None = None
+
         logger.debug(
             f"Circuit breaker '{circuit_name}' initialized",
             extra={
@@ -61,7 +60,7 @@ class CircuitBreaker:
                 "success_threshold": success_threshold,
             },
         )
-    
+
     def _check_timeout(self) -> bool:
         """Check if circuit should transition from OPEN to HALF_OPEN."""
         if self.state == CircuitState.OPEN and self.opened_at:
@@ -81,13 +80,13 @@ class CircuitBreaker:
                 self.success_count = 0
                 self.opened_at = None
                 return True
-        
+
         return False
-    
+
     def _record_failure(self):
         """Record a failure and potentially open circuit."""
         self.failure_count += 1
-        
+
         if self.state == CircuitState.HALF_OPEN:
             # Failure in HALF_OPEN: go back to OPEN
             logger.warning(
@@ -125,7 +124,7 @@ class CircuitBreaker:
                     "state": self.state.value,
                 },
             )
-    
+
     def _record_success(self):
         """Record a success and potentially close circuit."""
         if self.state == CircuitState.CLOSED:
@@ -149,7 +148,7 @@ class CircuitBreaker:
                     "success_threshold": self.success_threshold,
                 },
             )
-            
+
             if self.success_count >= self.success_threshold:
                 # Success threshold reached: close circuit
                 logger.info(
@@ -164,7 +163,7 @@ class CircuitBreaker:
                 self.state = CircuitState.CLOSED
                 self.failure_count = 0
                 self.success_count = 0
-    
+
     async def call(self, func: Callable):
         """Execute function with circuit breaker protection.
         
@@ -180,7 +179,7 @@ class CircuitBreaker:
         """
         # Check timeout first (OPEN → HALF_OPEN transition)
         self._check_timeout()
-        
+
         # Block if OPEN
         if self.state == CircuitState.OPEN:
             logger.debug(
@@ -194,28 +193,28 @@ class CircuitBreaker:
                 circuit_name=self.circuit_name,
                 cooldown_until=self.opened_at + self.timeout_seconds if self.opened_at else None,
             )
-        
+
         try:
             # Execute function
             if asyncio.iscoroutinefunction(func):
                 result = await func()
             else:
                 result = func()
-            
+
             # Record success
             self._record_success()
-            
+
             return result
-        
-        except Exception as e:
+
+        except Exception:
             # Record failure
             self._record_failure()
             raise
-    
+
     def get_state(self) -> CircuitState:
         """Get current circuit state."""
         return self.state
-    
+
     def reset(self):
         """Reset circuit breaker to CLOSED state."""
         logger.info(
@@ -259,22 +258,22 @@ def circuit_breaker(
                 success_threshold=success_threshold,
                 circuit_name=circuit_name,
             )
-        
+
         breaker = func._circuit_breaker
-        
+
         @functools.wraps(func)
         async def async_wrapper(*args, **kwargs):
             return await breaker.call(lambda: func(*args, **kwargs))
-        
+
         @functools.wraps(func)
         def sync_wrapper(*args, **kwargs):
             return breaker.call(lambda: func(*args, **kwargs))
-        
+
         # Return appropriate wrapper
         if asyncio.iscoroutinefunction(func):
             return async_wrapper
         else:
             return sync_wrapper
-    
+
     return decorator
 

@@ -1,11 +1,8 @@
 """Database configuration and async engine management."""
 
-import os
-from typing import Optional
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -87,8 +84,8 @@ db_config = DatabaseConfig()
 
 
 # Global async engine and session factory (initialized on first use)
-_async_engine: Optional[AsyncEngine] = None
-_async_session_maker: Optional[async_sessionmaker[AsyncSession]] = None
+_async_engine: AsyncEngine | None = None
+_async_session_maker: async_sessionmaker[AsyncSession] | None = None
 
 
 def get_async_engine() -> AsyncEngine:

@@ -1,5 +1,5 @@
 """Base exception classes for the application."""
-from typing import Optional, Dict, Any
+from typing import Any
 
 
 class ResearchAgentError(Exception):
@@ -18,9 +18,9 @@ class ResearchAgentError(Exception):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
-        original: Optional[Exception] = None,
+        error_code: str | None = None,
+        details: dict[str, Any] | None = None,
+        original: Exception | None = None,
     ):
         self.message = message
         self.error_code = error_code or "UNKNOWN_ERROR"
@@ -34,7 +34,7 @@ class ResearchAgentError(Exception):
 
         super().__init__(full_message)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert exception to dictionary for logging/API responses.
 
         Returns:
@@ -62,7 +62,7 @@ class CircuitOpenError(ResearchAgentError):
     def __init__(
         self,
         circuit_name: str,
-        cooldown_until: Optional[float] = None,
+        cooldown_until: float | None = None,
     ):
         import time
 

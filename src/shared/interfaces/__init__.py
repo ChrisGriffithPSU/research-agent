@@ -5,9 +5,9 @@ All concrete implementations must honor these contracts.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Protocol
+from collections.abc import Callable
 from datetime import datetime
-
+from typing import Any, Dict, List, Optional, Protocol
 
 # ==================== Cache Interfaces ====================
 
@@ -80,7 +80,7 @@ class ICacheBackend(Protocol):
     """
 
     @abstractmethod
-    async def get(self, key: str) -> Optional[bytes]:
+    async def get(self, key: str) -> bytes | None:
         """Get a value from cache.
 
         Args:
@@ -96,7 +96,7 @@ class ICacheBackend(Protocol):
         self,
         key: str,
         value: bytes,
-        ttl_seconds: Optional[int] = None,
+        ttl_seconds: int | None = None,
     ) -> None:
         """Set a value in cache.
 
@@ -129,7 +129,7 @@ class ICacheBackend(Protocol):
         ...
 
     @abstractmethod
-    async def get_many(self, keys: List[str]) -> Dict[str, bytes]:
+    async def get_many(self, keys: list[str]) -> dict[str, bytes]:
         """Get multiple values from cache.
 
         Args:
@@ -172,8 +172,8 @@ class LLMResponse:
         self,
         content: str,
         model: str,
-        usage: Optional[Dict[str, int]] = None,
-        latency_ms: Optional[float] = None,
+        usage: dict[str, int] | None = None,
+        latency_ms: float | None = None,
     ):
         self.content = content
         self.model = model
@@ -191,10 +191,10 @@ class ILLMClient(Protocol):
     async def complete(
         self,
         prompt: str,
-        system: Optional[str] = None,
+        system: str | None = None,
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
-        response_format: Optional[Dict[str, str]] = None,
+        max_tokens: int | None = None,
+        response_format: dict[str, str] | None = None,
         **kwargs,
     ) -> LLMResponse:
         """Complete a prompt.
@@ -534,7 +534,7 @@ class HTTPResponse:
         self,
         status_code: int,
         content: bytes,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
     ):
         self.status_code = status_code
         self.content = content
@@ -583,7 +583,7 @@ class IArtifactStore(Protocol):
         self,
         key: str,
         data: bytes,
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> str:
         """Store artifact data.
 
@@ -598,7 +598,7 @@ class IArtifactStore(Protocol):
         ...
 
     @abstractmethod
-    async def retrieve(self, key: str) -> Optional[bytes]:
+    async def retrieve(self, key: str) -> bytes | None:
         """Retrieve artifact data.
 
         Args:
@@ -634,7 +634,7 @@ class IArtifactStore(Protocol):
         ...
 
     @abstractmethod
-    async def list_prefix(self, prefix: str) -> List[str]:
+    async def list_prefix(self, prefix: str) -> list[str]:
         """List artifacts with given prefix.
 
         Args:

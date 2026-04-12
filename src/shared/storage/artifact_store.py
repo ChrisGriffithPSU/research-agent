@@ -5,9 +5,7 @@ Supports local filesystem (default) with swappable backend for S3/Object storage
 """
 
 import os
-from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Optional
 
 from src.shared.interfaces import IArtifactStore
 
@@ -31,7 +29,7 @@ class LocalArtifactStore(IArtifactStore):
         # Returns: /path/to/artifacts/work-123/concepts/concepts.json
     """
 
-    def __init__(self, base_dir: Optional[str] = None):
+    def __init__(self, base_dir: str | None = None):
         """Initialize local artifact store.
 
         Args:
@@ -44,7 +42,7 @@ class LocalArtifactStore(IArtifactStore):
         self,
         key: str,
         data: bytes,
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> str:
         """Store artifact in local filesystem.
 
@@ -74,7 +72,7 @@ class LocalArtifactStore(IArtifactStore):
 
         return str(file_path)
 
-    async def retrieve(self, key: str) -> Optional[bytes]:
+    async def retrieve(self, key: str) -> bytes | None:
         """Retrieve artifact from local filesystem.
 
         Args:
@@ -119,7 +117,7 @@ class LocalArtifactStore(IArtifactStore):
         file_path.unlink()
         return True
 
-    async def list_prefix(self, prefix: str) -> List[str]:
+    async def list_prefix(self, prefix: str) -> list[str]:
         """List artifacts with given prefix.
 
         Args:
@@ -141,7 +139,7 @@ class LocalArtifactStore(IArtifactStore):
             if item.is_file():
                 # Get relative path from base_dir
                 rel_path = item.relative_to(self.base_dir)
-                artifacts.append(str(rel_path))
+                artifacts.append(str(rel_path).replace(os.sep, "/"))
 
         return sorted(artifacts)
 
@@ -164,7 +162,7 @@ class ArtifactStoreFactory:
     """
 
     @staticmethod
-    def create_local(base_dir: Optional[str] = None) -> LocalArtifactStore:
+    def create_local(base_dir: str | None = None) -> LocalArtifactStore:
         """Create local filesystem artifact store.
 
         Args:

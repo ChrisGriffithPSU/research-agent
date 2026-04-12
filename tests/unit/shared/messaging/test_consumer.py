@@ -6,6 +6,7 @@ import pytest
 
 from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.schemas import QueueName
+from src.workers.shared.message_schemas import PaperFullTextRequest
 
 
 class _Conn:
@@ -22,7 +23,11 @@ async def test_subscribe_requires_async_handler() -> None:
         return None
 
     with pytest.raises(ValueError):
-        consumer.subscribe(QueueName.CONTENT_DISCOVERED, _sync_handler)
+        consumer.subscribe(
+            QueueName.PAPER_FULLTEXT_REQUEST,
+            _sync_handler,
+            message_type=PaperFullTextRequest,
+        )
 
 
 @pytest.mark.asyncio

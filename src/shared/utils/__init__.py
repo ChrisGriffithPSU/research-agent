@@ -1,7 +1,6 @@
 """Shared utilities module."""
 
-from src.shared.utils import retry
-from src.shared.utils import circuit_breaker
+from src.shared.utils import circuit_breaker, retry
 
 __all__ = [
     # Retry utilities

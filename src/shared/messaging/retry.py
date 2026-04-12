@@ -1,11 +1,9 @@
 """Retry strategies for messaging operations."""
-import asyncio
 import logging
 import random
 from abc import ABC, abstractmethod
-from typing import Optional
 
-from src.shared.messaging.exceptions import PermanentError, TemporaryError
+from src.shared.messaging.exceptions import PermanentError
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +88,7 @@ class ExponentialBackoffStrategy(IRetryStrategy):
 
         # PublishError and ConnectionError are usually permanent
         # Don't retry them (let the caller handle)
-        from src.shared.messaging.exceptions import PublishError, ConnectionError
+        from src.shared.messaging.exceptions import ConnectionError, PublishError
         if isinstance(error, (PublishError, ConnectionError)):
             logger.debug(f"Permanent messaging error ({type(error).__name__}), not retrying")
             return False
@@ -156,7 +154,7 @@ class LinearBackoffStrategy(IRetryStrategy):
         if isinstance(error, PermanentError):
             return False
 
-        from src.shared.messaging.exceptions import PublishError, ConnectionError
+        from src.shared.messaging.exceptions import ConnectionError, PublishError
         if isinstance(error, (PublishError, ConnectionError)):
             return False
 

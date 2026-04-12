@@ -1,6 +1,5 @@
 """Database-related exceptions."""
 
-from typing import Optional
 
 from src.shared.exceptions.base import ResearchAgentError
 
@@ -11,9 +10,9 @@ class DatabaseError(ResearchAgentError):
     def __init__(
         self,
         message: str,
-        error_code: Optional[str] = None,
-        details: Optional[dict] = None,
-        original: Optional[Exception] = None,
+        error_code: str | None = None,
+        details: dict | None = None,
+        original: Exception | None = None,
     ):
         super().__init__(
             message=message,
@@ -29,8 +28,8 @@ class RepositoryNotFoundError(DatabaseError):
     def __init__(
         self,
         message: str = "Repository object not found",
-        details: Optional[dict] = None,
-        original: Optional[Exception] = None,
+        details: dict | None = None,
+        original: Exception | None = None,
     ):
         super().__init__(
             message=message,
@@ -46,8 +45,8 @@ class RepositoryConflictError(DatabaseError):
     def __init__(
         self,
         message: str = "Repository conflict error",
-        details: Optional[dict] = None,
-        original: Optional[Exception] = None,
+        details: dict | None = None,
+        original: Exception | None = None,
     ):
         super().__init__(
             message=message,

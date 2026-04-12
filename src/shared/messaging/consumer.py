@@ -6,24 +6,18 @@ import json
 import logging
 import time
 import traceback
-from typing import Any, Callable, Dict, Optional
+from collections.abc import Callable
+from typing import Any
 
 import aio_pika
-
 from src.shared.messaging.connection import RabbitMQConnection
-from src.shared.messaging.retry import IRetryStrategy
-from src.shared.messaging.schemas import BaseMessage, QueueName
-from src.shared.messaging.metrics import get_metrics
 from src.shared.messaging.exceptions import (
     PermanentError,
     TemporaryError,
-    ConsumeError,
-    ChannelError,
-    ChannelClosedError,
-    ConnectionClosedError,
-    ResourceLockedError,
-    PreconditionFailedError,
 )
+from src.shared.messaging.metrics import get_metrics
+from src.shared.messaging.retry import IRetryStrategy
+from src.shared.messaging.schemas import BaseMessage, QueueName
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +36,12 @@ class MessageConsumer:
     """
 
     # Message type mapping for deserialization
-    _MESSAGE_TYPES: Dict[str, type] = {}
+    _MESSAGE_TYPES: dict[str, type] = {}
 
     def __init__(
         self,
         connection: RabbitMQConnection,
-        retry_strategy: Optional[IRetryStrategy] = None,
+        retry_strategy: IRetryStrategy | None = None,
         prefetch_count: int = 10,
     ):
         """Initialize message consumer.
@@ -60,36 +54,22 @@ class MessageConsumer:
         self._connection = connection
         self._retry_strategy = retry_strategy
         self._prefetch_count = prefetch_count
-        self._handlers: Dict[str, Callable] = {}
+        self._handlers: dict[str, Callable] = {}
         self._metrics = get_metrics()
         self._consuming = False
         self._shutdown_requested = False
         self._consumer_bindings: list[tuple[aio_pika.abc.AbstractQueue, str]] = []
         self._message_type_mapping = self._build_message_type_mapping()
 
-    def _build_message_type_mapping(self) -> Dict[str, type]:
+    def _build_message_type_mapping(self) -> dict[str, type]:
         """Build mapping from queue to message type.
 
         Returns:
-            Dict mapping QueueName to corresponding Pydantic model
+            Dict mapping queue name to corresponding Pydantic model
         """
-        from src.shared.messaging.schemas import (
-            SourceMessage,
-            DeduplicatedContentMessage,
-            ExtractedInsightsMessage,
-            DigestReadyMessage,
-            FeedbackMessage,
-            TrainingTriggerMessage,
-        )
-
-        return {
-            QueueName.CONTENT_DISCOVERED.value: SourceMessage,
-            QueueName.CONTENT_DEDUPLICATED.value: DeduplicatedContentMessage,
-            QueueName.INSIGHTS_EXTRACTED.value: ExtractedInsightsMessage,
-            QueueName.DIGEST_READY.value: DigestReadyMessage,
-            QueueName.FEEDBACK_SUBMITTED.value: FeedbackMessage,
-            QueueName.TRAINING_TRIGGER.value: TrainingTriggerMessage,
-        }
+        # Default mapping is empty; workers register their own message types
+        # via subscribe(message_type=...).
+        return {}
 
     def subscribe(
         self,
@@ -224,7 +204,7 @@ class MessageConsumer:
             # Start timer
             start_time = time.time()
             validated_message: Any = None
-            data: Optional[dict] = None
+            data: dict | None = None
 
             try:
                 # Deserialize message
@@ -319,7 +299,7 @@ class MessageConsumer:
                 await result
             self._metrics.record_message_consumed(queue_name)
 
-        except Exception as e:
+        except Exception:
             # Handler exception - will be caught by callback
             raise
 
@@ -330,7 +310,7 @@ class MessageConsumer:
         error_type: str,
         error: Exception,
         validated_message: Any,
-        data: Optional[dict],
+        data: dict | None,
     ) -> None:
         """Handle retryable errors with bounded retries.
 
@@ -340,8 +320,7 @@ class MessageConsumer:
         - If retry metadata is unavailable, allow one broker requeue using redelivery flag.
         """
         logger.warning(
-            f"{error_type} processing message from {queue_name}: {error}\n"
-            f"{traceback.format_exc()}"
+            f"{error_type} processing message from {queue_name}: {error}\n{traceback.format_exc()}"
         )
 
         current_attempt = getattr(validated_message, "attempt", None)

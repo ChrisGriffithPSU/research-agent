@@ -1,32 +1,25 @@
 """Enhanced vector search helpers for pgvector."""
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple, Type
-
-from sqlalchemy import select, and_
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.sql.expression import cast
+from typing import Any
 
 # pgvector support will be available at runtime
 # from pgvector.sqlalchemy import Vector
-
-from src.shared.models.base import Base
-
 
 logger = logging.getLogger(__name__)
 
 
 class EnhancedVectorSearchMixin:
     """Mixin for enhanced vector similarity search with filtering."""
-    
+
     async def vector_similarity_search_filtered(
         self,
-        query_embedding: List[float],
-        filters: Optional[Dict[str, Any]] = None,
-        date_range: Optional[Tuple[datetime, datetime]] = None,
+        query_embedding: list[float],
+        filters: dict[str, Any] | None = None,
+        date_range: tuple[datetime, datetime] | None = None,
         limit: int = 10,
-        threshold: Optional[float] = None,
-    ) -> List[Any]:
+        threshold: float | None = None,
+    ) -> list[Any]:
         """Vector similarity search with optional filters.
         
         Args:
@@ -56,18 +49,18 @@ class EnhancedVectorSearchMixin:
         """
         model = self.model
         table = model.__table__
-        
+
         # Find vector column
         vector_column = None
         for col in table.columns:
             if col.name.endswith("embedding"):
                 vector_column = col
                 break
-        
+
         if vector_column is None:
             logger.error(f"{self._model_name}: No embedding column found")
             raise ValueError(f"Model {model.__name__} has no embedding column")
-        
+
         logger.debug(
             f"{self._model_name}: Vector search",
             extra={
@@ -78,7 +71,7 @@ class EnhancedVectorSearchMixin:
                 "threshold": threshold,
             },
         )
-        
+
         try:
             # Build query with vector similarity
             # Note: This is a placeholder. Actual pgvector usage requires:
@@ -98,7 +91,7 @@ class EnhancedVectorSearchMixin:
                     "vector_column": vector_column.name,
                 },
             )
-            
+
             # Placeholder: return all without vector search
             # In production, this would be:
             # stmt = select(table).order_by(vector_column.l2_distance(query_embedding))
@@ -115,9 +108,9 @@ class EnhancedVectorSearchMixin:
             #     stmt = stmt.where(table.c.distance <= threshold)
             # result = await self.session.execute(stmt)
             # return result.scalars().all()
-            
+
             return []
-        
+
         except Exception as e:
             await self.session.rollback()
             logger.error(
@@ -132,14 +125,14 @@ class EnhancedVectorSearchMixin:
                 exc_info=True,
             )
             raise
-    
+
     async def vector_similarity_search_paginated(
         self,
-        query_embedding: List[float],
+        query_embedding: list[float],
         page: int = 1,
         per_page: int = 10,
-        filters: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        filters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """Paginated vector similarity search.
         
         Args:
@@ -164,20 +157,20 @@ class EnhancedVectorSearchMixin:
         """
         # Calculate offset
         offset = (page - 1) * per_page
-        
+
         # Get results
         results = await self.vector_similarity_search_filtered(
             query_embedding=query_embedding,
             filters=filters,
             limit=per_page + offset,  # Get enough for pagination
         )
-        
+
         # Paginate
         paginated_results = results[offset:offset + per_page]
-        
+
         # Estimate total pages (rough estimate, would need total count)
         total_pages = (len(results) + per_page - 1) // per_page
-        
+
         return {
             "results": paginated_results,
             "page": page,

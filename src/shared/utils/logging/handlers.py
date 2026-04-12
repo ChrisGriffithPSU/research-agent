@@ -1,12 +1,9 @@
 """Log handlers for structured logging."""
-import json
 import logging
 import random
 import time
 from collections import deque
-from typing import Callable, List, Optional
-
-from src.shared.utils.logging.formatters import StructuredJSONFormatter
+from collections.abc import Callable
 
 
 class SamplingHandler(logging.Handler):
@@ -15,7 +12,7 @@ class SamplingHandler(logging.Handler):
     Never drops ERROR or CRITICAL logs.
     Samples INFO, DEBUG, WARNING logs based on configured rates.
     """
-    
+
     def __init__(
         self,
         handler: logging.Handler,
@@ -41,7 +38,7 @@ class SamplingHandler(logging.Handler):
         # ERROR and CRITICAL are always sampled
         self.error_rate = 1.0
         self.critical_rate = 1.0
-    
+
     def emit(self, record: logging.LogRecord) -> None:
         """Emit record if sampling decision allows it.
         
@@ -50,12 +47,12 @@ class SamplingHandler(logging.Handler):
         """
         # Get sampling rate for this log level
         sampling_rate = self._get_sampling_rate(record.levelno)
-        
+
         # Always sample ERROR and CRITICAL
         if sampling_rate >= 1.0:
             self.handler.emit(record)
             return
-        
+
         # Sample based on random number
         if random.random() < sampling_rate:
             self.handler.emit(record)
@@ -72,7 +69,7 @@ class SamplingHandler(logging.Handler):
             )
             # Emit to show it was sampled
             self.handler.emit(sampling_record)
-    
+
     def _get_sampling_rate(self, levelno: int) -> float:
         """Get sampling rate for a log level number.
         
@@ -92,11 +89,11 @@ class SamplingHandler(logging.Handler):
             return self.error_rate
         else:  # CRITICAL
             return self.critical_rate
-    
+
     def close(self) -> None:
         """Close underlying handler."""
         self.handler.close()
-    
+
     def flush(self) -> None:
         """Flush underlying handler."""
         self.handler.flush()
@@ -107,11 +104,11 @@ class NullHandler(logging.Handler):
     
     Useful for testing or disabling logging for specific modules.
     """
-    
+
     def emit(self, record: logging.LogRecord) -> None:
         """Drop all log records."""
         pass
-    
+
     def flush(self) -> None:
         """No-op flush."""
         pass
@@ -122,8 +119,8 @@ class MetricsHandler(logging.Handler):
     
     Note: This is a placeholder. In production, integrate with Prometheus/StatsD.
     """
-    
-    def __init__(self, metrics_callback: Optional[Callable[[str, int], None]] = None):
+
+    def __init__(self, metrics_callback: Callable[[str, int], None] | None = None):
         """Initialize metrics handler.
         
         Args:
@@ -139,13 +136,13 @@ class MetricsHandler(logging.Handler):
             "ERROR": 0,
             "CRITICAL": 0,
         }
-    
+
     def emit(self, record: logging.LogRecord) -> None:
         """Emit record and update metrics."""
         level_name = record.levelname
         if level_name in self.counts:
             self.counts[level_name] += 1
-        
+
         # Call metrics callback if provided
         if self.metrics_callback:
             try:
@@ -153,11 +150,11 @@ class MetricsHandler(logging.Handler):
             except Exception:
                 # Don't fail logging if metrics callback fails
                 pass
-    
+
     def get_counts(self) -> dict:
         """Get current log counts by level."""
         return self.counts.copy()
-    
+
     def reset_counts(self) -> None:
         """Reset all log counts."""
         for level in self.counts:
@@ -170,7 +167,7 @@ class SlidingWindowSamplingHandler(SamplingHandler):
     Adapts sampling rate based on recent log volume.
     If recent logs exceed threshold, reduce sampling rate.
     """
-    
+
     def __init__(
         self,
         handler: logging.Handler,
@@ -197,20 +194,20 @@ class SlidingWindowSamplingHandler(SamplingHandler):
         self.base_debug_rate = base_debug_rate
         self.base_info_rate = base_info_rate
         self.base_warning_rate = base_warning_rate
-    
+
     def _cleanup_window(self) -> None:
         """Remove old entries from window."""
         now = time.time()
         while self.window and self.window[0] < now - self.window_seconds:
             self.window.popleft()
-    
+
     def emit(self, record: logging.LogRecord) -> None:
         """Emit record with adaptive sampling."""
         self._cleanup_window()
-        
+
         # Calculate current log count in window
         current_count = len(self.window)
-        
+
         # Adjust sampling rate based on volume
         if current_count >= self.max_logs:
             # High volume: reduce sampling rate
@@ -222,19 +219,19 @@ class SlidingWindowSamplingHandler(SamplingHandler):
             debug_rate = self.base_debug_rate
             info_rate = self.base_info_rate
             warning_rate = self.base_warning_rate
-        
+
         # Temporarily update rates for this emit
         old_debug = self.debug_rate
         old_info = self.info_rate
         old_warning = self.warning_rate
-        
+
         self.debug_rate = debug_rate
         self.info_rate = info_rate
         self.warning_rate = warning_rate
-        
+
         # Emit with adjusted rates
         super().emit(record)
-        
+
         # Restore rates and add to window
         self.debug_rate = old_debug
         self.info_rate = old_info

@@ -3,14 +3,14 @@
 Uses PDF URLs directly - docling handles HTTP download internally.
 """
 
-import re
 import logging
-from typing import Dict, List, Any, Optional
+import re
 from datetime import datetime
+from typing import Any
 
-from docling.document_converter import DocumentConverter
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import PdfPipelineOptions
+from docling.document_converter import DocumentConverter
 
 try:
     from docling.document_converter import PdfFormatOption
@@ -18,14 +18,11 @@ except ImportError:  # pragma: no cover
     PdfFormatOption = None  # type: ignore[assignment]
 
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
-from src.services.fetchers.arxiv.schemas.paper import ParsedContent
-
 from src.services.fetchers.arxiv.exceptions import (
-    PDFDownloadError,
     PDFParseError,
     PDFSizeError,
 )
-
+from src.services.fetchers.arxiv.schemas.paper import ParsedContent
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +45,7 @@ class PDFProcessor:
 
     def __init__(
         self,
-        config: Optional[ArxivFetcherConfig] = None,
+        config: ArxivFetcherConfig | None = None,
     ):
         """Initialize PDF processor.
 
@@ -271,7 +268,7 @@ class PDFProcessor:
 
         return "\n\n".join(text_parts)
 
-    def _extract_tables(self, doc_dict: dict) -> List[Dict[str, Any]]:
+    def _extract_tables(self, doc_dict: dict) -> list[dict[str, Any]]:
         """Extract tables from docling output.
 
         Args:
@@ -295,7 +292,7 @@ class PDFProcessor:
 
         return tables
 
-    def _format_table(self, table: dict) -> Dict[str, Any]:
+    def _format_table(self, table: dict) -> dict[str, Any]:
         """Format a table for storage.
 
         Args:
@@ -312,7 +309,7 @@ class PDFProcessor:
             "page_number": table.get("page_no", 0),
         }
 
-    def _extract_figures(self, doc_dict: dict) -> List[Dict[str, str]]:
+    def _extract_figures(self, doc_dict: dict) -> list[dict[str, str]]:
         """Extract figure captions from docling output.
 
         Args:
@@ -360,13 +357,13 @@ class PDFProcessor:
 
         return figures
 
-    def _extract_equations(self, text: str) -> List[str]:
+    def _extract_equations(self, text: str) -> list[str]:
         """Extract LaTeX equations from text content.
 
         Looks for:
-        - Inline: $...$ or \(...\)
-        - Block: $$...$$ or \[...\]
-        - LaTeX environments: \begin{equation}...\end{equation}
+        - Inline: $...$ or \\(...\\)
+        - Block: $$...$$ or \\[...\\]
+        - LaTeX environments: \begin{equation}...\\end{equation}
 
         Args:
             text: Text content to search
@@ -406,8 +403,8 @@ class PDFProcessor:
 
     async def extract_batch(
         self,
-        papers: List[Dict[str, str]],
-    ) -> List[ParsedContent]:
+        papers: list[dict[str, str]],
+    ) -> list[ParsedContent]:
         """Extract content from multiple PDFs.
 
         Args:
@@ -444,7 +441,7 @@ class PDFProcessor:
             logger.warning(f"PDF processor health check failed: {e}")
             return False
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """Get processor statistics.
 
         Returns:

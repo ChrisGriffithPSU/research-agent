@@ -3,11 +3,10 @@
 Simple repository for duplicate detection and paper tracking.
 """
 
-from typing import Optional
-from sqlalchemy import Column, String, DateTime, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
+from sqlalchemy import Column, DateTime, String, select
+from sqlalchemy.ext.asyncio import AsyncSession
 from src.shared.models.base import Base
 
 
@@ -20,8 +19,8 @@ class PaperModel(Base):
     status = Column(
         String, default="discovered"
     )  # discovered, triaged, rejected, concepts_extracted
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
 
 class PaperRepository:
@@ -80,5 +79,5 @@ class PaperRepository:
 
         if paper:
             paper.status = status
-            paper.updated_at = datetime.now(timezone.utc)
+            paper.updated_at = datetime.now(UTC)
             await self.session.commit()

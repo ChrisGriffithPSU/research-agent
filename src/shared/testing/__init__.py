@@ -3,9 +3,17 @@
 Provides mock implementations for external services to enable fast, isolated testing.
 """
 from src.shared.testing.mocks import (
+    CircuitOpenError,
+    DictCacheBackend,
+    HTTPError,
     # Cache
     InMemoryCacheBackend,
-    DictCacheBackend,
+    MockCircuitBreaker,
+    # Database
+    MockDatabaseSession,
+    MockHTTPClient,
+    # HTTP
+    MockHTTPResponse,
     # LLM
     MockLLMClient,
     MockLLMResponse,
@@ -14,21 +22,13 @@ from src.shared.testing.mocks import (
     MockMessageChannel,
     MockMessageConnection,
     MockMessagePublisher,
-    MockRetryStrategy,
-    MockCircuitBreaker,
-    CircuitOpenError,
-    # HTTP
-    MockHTTPResponse,
-    MockHTTPClient,
-    HTTPError,
-    # Database
-    MockDatabaseSession,
     MockResult,
+    MockRetryStrategy,
     # Factory
     TestDependencyFactory,
+    async_raises,
     # Utilities
     async_return,
-    async_raises,
 )
 
 __all__ = [

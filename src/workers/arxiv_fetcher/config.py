@@ -4,14 +4,13 @@ Hardcoded categories with configurable fetch parameters.
 No LLM-based query expansion - simple category-based fetching.
 """
 
-from typing import List
+
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # Hardcoded ArXiv categories for MFT quant research
 # Focused on ML, stats, quant finance, and mathematical modeling
-HARDCODED_CATEGORIES: List[str] = [
+HARDCODED_CATEGORIES: list[str] = [
     # Machine Learning & Artificial Intelligence
     "cs.LG",  # Machine Learning
     "cs.AI",  # Artificial Intelligence
@@ -79,7 +78,7 @@ class ArxivFetcherConfig(BaseSettings):
     """
 
     # Hardcoded category list (not configurable)
-    categories: List[str] = Field(
+    categories: list[str] = Field(
         default=HARDCODED_CATEGORIES, description="ArXiv categories to monitor (hardcoded)"
     )
 
@@ -101,7 +100,7 @@ class ArxivFetcherConfig(BaseSettings):
 
     # Queue configuration
     output_queue: str = Field(
-        default="paper.triage.request", description="Queue to publish discovered papers"
+        default="paper.fulltext.request", description="Queue to publish discovered papers"
     )
 
     # Duplicate checking

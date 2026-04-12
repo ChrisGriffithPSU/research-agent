@@ -8,18 +8,18 @@ Exports:
 - ArxivParseRequestMessage: Parse request message
 - ArxivExtractedMessage: Message with extracted content
 """
+from src.services.fetchers.arxiv.schemas.messages import (
+    ArxivDiscoveredMessage,
+    ArxivDiscoveryBatch,
+    ArxivExtractedMessage,
+    ArxivParseRequestMessage,
+)
 from src.services.fetchers.arxiv.schemas.paper import (
+    FigureData,
     PaperMetadata,
     ParsedContent,
     QueryExpansion,
     TableData,
-    FigureData,
-)
-from src.services.fetchers.arxiv.schemas.messages import (
-    ArxivDiscoveredMessage,
-    ArxivParseRequestMessage,
-    ArxivExtractedMessage,
-    ArxivDiscoveryBatch,
 )
 
 __all__ = [

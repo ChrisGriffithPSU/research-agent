@@ -1,12 +1,11 @@
 """Health check functionality for messaging."""
 import logging
-from datetime import datetime, timezone
-from typing import Dict, List, Literal
+from datetime import UTC, datetime
+from typing import Literal
 
 from src.shared.messaging.connection import RabbitMQConnection
-from src.shared.messaging.schemas import QueueName
-from src.shared.messaging.exceptions import ConnectionError
 from src.shared.messaging.metrics import get_metrics
+from src.shared.messaging.schemas import QueueName
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +17,8 @@ class HealthStatus:
         self,
         status: Literal["healthy", "unhealthy", "degraded"],
         timestamp: datetime,
-        checks: Dict[str, str],
-        metrics: Dict[str, any],
+        checks: dict[str, str],
+        metrics: dict[str, any],
     ):
         """Initialize health status.
 
@@ -37,7 +36,7 @@ class HealthStatus:
 
 async def check_messaging_health(
     connection: RabbitMQConnection,
-    queues: List[QueueName] = None,
+    queues: list[QueueName] = None,
 ) -> HealthStatus:
     """Check RabbitMQ health and queue status.
 
@@ -54,7 +53,7 @@ async def check_messaging_health(
 
     health = HealthStatus(
         status="healthy",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
         checks={},
         metrics={},
     )

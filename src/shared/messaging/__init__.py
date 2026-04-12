@@ -3,7 +3,7 @@
 Provides:
 - Configuration management (MessagingConfig)
 - Connection management (RabbitMQConnection, get_connection)
-- Message schemas (BaseMessage, SourceMessage, etc.)
+- Message schemas (BaseMessage, QueueName)
 - Publisher API (MessagePublisher, get_publisher)
 - Consumer API (MessageConsumer, message_handler decorator)
 - Retry strategies (ExponentialBackoffStrategy, etc.)
@@ -14,64 +14,46 @@ Provides:
 """
 
 # Configuration
-from src.shared.messaging.config import MessagingConfig, messaging_config
-
-# Exceptions
-from src.shared.messaging.exceptions import (
-    MessagingError,
-    ConnectionError,
-    PublishError,
-    ConsumeError,
-    MessageValidationError,
-    QueueError,
-    CircuitBreakerOpenError,
-    PermanentError,
-    TemporaryError,
-)
-
-# Schemas
-from src.shared.messaging.schemas import (
-    QueueName,
-    BaseMessage,
-    SourceMessage,
-    DeduplicatedContentMessage,
-    ExtractedInsightsMessage,
-    DigestItem,
-    DigestReadyMessage,
-    FeedbackMessage,
-    TrainingTriggerMessage,
-)
-
-# Core logic
-from src.shared.messaging.retry import (
-    IRetryStrategy,
-    ExponentialBackoffStrategy,
-    LinearBackoffStrategy,
-    NoRetryStrategy,
-)
-
 from src.shared.messaging.circuit_breaker import (
     CircuitBreaker,
     circuit_breaker,
 )
-
-from src.shared.messaging.metrics import (
-    MessagingMetrics,
-    get_metrics,
-    reset_metrics,
-)
+from src.shared.messaging.config import MessagingConfig, messaging_config
 
 # Infrastructure
 from src.shared.messaging.connection import (
     RabbitMQConnection,
-    get_connection,
     disconnect,
+    get_connection,
+)
+from src.shared.messaging.consumer import (
+    MessageConsumer,
+    message_handler,
 )
 
-from src.shared.messaging.queue_setup import (
-    QueueSetup,
-    EXCHANGE_NAME,
-    DLQ_EXCHANGE_NAME,
+# Exceptions
+from src.shared.messaging.exceptions import (
+    CircuitBreakerOpenError,
+    ConnectionError,
+    ConsumeError,
+    MessageValidationError,
+    MessagingError,
+    PermanentError,
+    PublishError,
+    QueueError,
+    TemporaryError,
+)
+
+# Health checks
+from src.shared.messaging.health import (
+    HealthStatus,
+    check_messaging_health,
+    quick_check,
+)
+from src.shared.messaging.metrics import (
+    MessagingMetrics,
+    get_metrics,
+    reset_metrics,
 )
 
 # Publisher/Consumer APIs
@@ -80,17 +62,24 @@ from src.shared.messaging.publisher import (
     MessagePublisherFactory,
     NullMessagePublisher,
 )
-
-from src.shared.messaging.consumer import (
-    MessageConsumer,
-    message_handler,
+from src.shared.messaging.queue_setup import (
+    DLQ_EXCHANGE_NAME,
+    EXCHANGE_NAME,
+    QueueSetup,
 )
 
-# Health checks
-from src.shared.messaging.health import (
-    HealthStatus,
-    check_messaging_health,
-    quick_check,
+# Core logic
+from src.shared.messaging.retry import (
+    ExponentialBackoffStrategy,
+    IRetryStrategy,
+    LinearBackoffStrategy,
+    NoRetryStrategy,
+)
+
+# Schemas
+from src.shared.messaging.schemas import (
+    BaseMessage,
+    QueueName,
 )
 
 __all__ = [
@@ -110,13 +99,6 @@ __all__ = [
     # Schemas
     "QueueName",
     "BaseMessage",
-    "SourceMessage",
-    "DeduplicatedContentMessage",
-    "ExtractedInsightsMessage",
-    "DigestItem",
-    "DigestReadyMessage",
-    "FeedbackMessage",
-    "TrainingTriggerMessage",
     # Core logic
     "IRetryStrategy",
     "ExponentialBackoffStrategy",
@@ -146,4 +128,3 @@ __all__ = [
     "check_messaging_health",
     "quick_check",
 ]
-

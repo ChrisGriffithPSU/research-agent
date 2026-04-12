@@ -7,12 +7,10 @@ Runs the fetcher at configured intervals.
 import asyncio
 import logging
 import os
-from typing import Optional
 
 import aioschedule as schedule
 
 from src.workers.arxiv_fetcher.worker import ArxivFetcherWorker, FetcherDependencies
-
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +30,8 @@ class ArxivScheduler:
 
     def __init__(
         self,
-        interval_minutes: Optional[int] = None,
-        dependencies: Optional[FetcherDependencies] = None,
+        interval_minutes: int | None = None,
+        dependencies: FetcherDependencies | None = None,
     ):
         """Initialize scheduler.
 
@@ -46,7 +44,7 @@ class ArxivScheduler:
         )
         self.dependencies = dependencies
         self._running = False
-        self._worker: Optional[ArxivFetcherWorker] = None
+        self._worker: ArxivFetcherWorker | None = None
 
     async def start(self) -> None:
         """Start the scheduler.

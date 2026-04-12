@@ -1,6 +1,5 @@
 """LLM-related exceptions."""
 
-from typing import Optional
 
 from src.shared.exceptions.base import ResearchAgentError
 
@@ -11,10 +10,10 @@ class LLMError(ResearchAgentError):
     def __init__(
         self,
         message: str,
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        details: Optional[dict] = None,
-        original: Optional[Exception] = None,
+        provider: str | None = None,
+        model: str | None = None,
+        details: dict | None = None,
+        original: Exception | None = None,
     ):
         self.provider = provider
         self.model = model
@@ -40,10 +39,10 @@ class LLMProviderError(LLMError):
     def __init__(
         self,
         message: str = "LLM provider error",
-        provider: Optional[str] = None,
-        model: Optional[str] = None,
-        provider_code: Optional[str] = None,
-        original_error: Optional[Exception] = None,
+        provider: str | None = None,
+        model: str | None = None,
+        provider_code: str | None = None,
+        original_error: Exception | None = None,
     ):
         details = {}
         if provider_code is not None:

@@ -4,10 +4,10 @@ Defines contracts that components must honor.
 Allows for different implementations (e.g., mock for testing).
 """
 from abc import ABC, abstractmethod
-from typing import List, Optional, Dict, Any, AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 
 class PaperSource(str, Enum):
@@ -43,19 +43,19 @@ class PaperMetadata:
     version: str = "v1"
     title: str = ""
     abstract: str = ""
-    authors: List[str] = field(default_factory=list)
-    categories: List[str] = field(default_factory=list)
-    subcategories: List[str] = field(default_factory=list)
+    authors: list[str] = field(default_factory=list)
+    categories: list[str] = field(default_factory=list)
+    subcategories: list[str] = field(default_factory=list)
     submitted_date: str = ""
-    updated_date: Optional[str] = None
-    doi: Optional[str] = None
-    journal_ref: Optional[str] = None
-    comments: Optional[str] = None
+    updated_date: str | None = None
+    doi: str | None = None
+    journal_ref: str | None = None
+    comments: str | None = None
     pdf_url: str = ""
     arxiv_url: str = ""
     source: PaperSource = PaperSource.QUERY
     source_query: str = ""
-    relevance_score: Optional[float] = None
+    relevance_score: float | None = None
 
 
 @dataclass
@@ -72,10 +72,10 @@ class ParsedContent:
     """
     paper_id: str
     text_content: str = ""
-    tables: List[Dict[str, Any]] = field(default_factory=list)
-    equations: List[str] = field(default_factory=list)
-    figure_captions: List[Dict[str, str]] = field(default_factory=list)
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    tables: list[dict[str, Any]] = field(default_factory=list)
+    equations: list[str] = field(default_factory=list)
+    figure_captions: list[dict[str, str]] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -89,7 +89,7 @@ class QueryExpansion:
         cache_hit: Whether this was a cache hit
     """
     original_query: str
-    expanded_queries: List[str]
+    expanded_queries: list[str]
     generated_at: datetime = field(default_factory=datetime.utcnow)
     cache_hit: bool = False
 
@@ -100,16 +100,16 @@ class IArxivAPI(ABC):
     What changes: HTTP client implementation, retry logic, rate limiting strategy
     What must not change: Query execution, result parsing, pagination contract
     """
-    
+
     @abstractmethod
     async def search(
         self,
         query: str,
-        max_results: Optional[int] = None,
+        max_results: int | None = None,
         start_index: int = 0,
         sort_by: str = "relevance",
         sort_order: str = "descending",
-    ) -> List[PaperMetadata]:
+    ) -> list[PaperMetadata]:
         """Execute search query against arXiv API.
         
         Args:
@@ -123,14 +123,14 @@ class IArxivAPI(ABC):
             List of paper metadata matching query
         """
         pass
-    
+
     @abstractmethod
     async def fetch_by_categories(
         self,
-        categories: List[str],
+        categories: list[str],
         max_per_category: int = 50,
-        days_back: Optional[int] = None,
-    ) -> List[PaperMetadata]:
+        days_back: int | None = None,
+    ) -> list[PaperMetadata]:
         """Fetch recent papers from specified categories.
         
         Args:
@@ -142,12 +142,12 @@ class IArxivAPI(ABC):
             List of paper metadata from categories
         """
         pass
-    
+
     @abstractmethod
     async def fetch_by_ids(
         self,
-        paper_ids: List[str],
-    ) -> List[PaperMetadata]:
+        paper_ids: list[str],
+    ) -> list[PaperMetadata]:
         """Fetch specific papers by arXiv IDs.
         
         Args:
@@ -157,7 +157,7 @@ class IArxivAPI(ABC):
             List of paper metadata
         """
         pass
-    
+
     @abstractmethod
     async def health_check(self) -> bool:
         """Check if arXiv API is accessible.
@@ -174,7 +174,7 @@ class IPDFParser(ABC):
     What changes: PDF library implementation, extraction algorithm
     What must not change: Output format (ParsedContent dataclass)
     """
-    
+
     @abstractmethod
     async def extract(
         self,
@@ -191,7 +191,7 @@ class IPDFParser(ABC):
             ParsedContent with extracted text, tables, equations, captions
         """
         pass
-    
+
     @abstractmethod
     async def extract_from_bytes(
         self,
@@ -208,7 +208,7 @@ class IPDFParser(ABC):
             ParsedContent with extracted content
         """
         pass
-    
+
     @abstractmethod
     async def health_check(self) -> bool:
         """Check if PDF parser is healthy.
@@ -225,9 +225,9 @@ class ICacheBackend(ABC):
     What changes: Redis, disk, memory implementations
     What must not change: Get/set/delete interface, TTL handling
     """
-    
+
     @abstractmethod
-    async def get(self, key: str) -> Optional[bytes]:
+    async def get(self, key: str) -> bytes | None:
         """Get cached value by key.
         
         Args:
@@ -237,13 +237,13 @@ class ICacheBackend(ABC):
             Cached bytes or None if not found
         """
         pass
-    
+
     @abstractmethod
     async def set(
         self,
         key: str,
         value: bytes,
-        ttl_seconds: Optional[int] = None,
+        ttl_seconds: int | None = None,
     ) -> None:
         """Set cached value with optional TTL.
         
@@ -253,7 +253,7 @@ class ICacheBackend(ABC):
             ttl_seconds: Time-to-live in seconds
         """
         pass
-    
+
     @abstractmethod
     async def delete(self, key: str) -> None:
         """Delete cached value.
@@ -262,7 +262,7 @@ class ICacheBackend(ABC):
             key: Cache key to delete
         """
         pass
-    
+
     @abstractmethod
     async def exists(self, key: str) -> bool:
         """Check if key exists in cache.
@@ -274,7 +274,7 @@ class ICacheBackend(ABC):
             True if key exists, False otherwise
         """
         pass
-    
+
     @abstractmethod
     async def close(self) -> None:
         """Close cache connection."""
@@ -287,12 +287,12 @@ class IMessagePublisher(ABC):
     What changes: Queue implementation (RabbitMQ, Redis, etc.)
     What must not change: Publish interface, message format contract
     """
-    
+
     @abstractmethod
     async def publish_discovered(
         self,
-        papers: List[PaperMetadata],
-        correlation_id: Optional[str] = None,
+        papers: list[PaperMetadata],
+        correlation_id: str | None = None,
     ) -> int:
         """Publish discovered papers to arxiv.discovered queue.
         
@@ -304,7 +304,7 @@ class IMessagePublisher(ABC):
             Number of papers published successfully
         """
         pass
-    
+
     @abstractmethod
     async def publish_parse_request(
         self,
@@ -313,8 +313,8 @@ class IMessagePublisher(ABC):
         correlation_id: str,
         original_correlation_id: str,
         priority: int = 5,
-        relevance_score: Optional[float] = None,
-        intelligence_notes: Optional[str] = None,
+        relevance_score: float | None = None,
+        intelligence_notes: str | None = None,
     ) -> None:
         """Publish a parse request to arxiv.parse_request queue.
         
@@ -328,7 +328,7 @@ class IMessagePublisher(ABC):
             intelligence_notes: Optional notes from intelligence layer
         """
         pass
-    
+
     @abstractmethod
     async def publish_extracted(
         self,
@@ -346,7 +346,7 @@ class IMessagePublisher(ABC):
             parse_correlation_id: Parse request correlation
         """
         pass
-    
+
     @abstractmethod
     async def health_check(self) -> bool:
         """Check if publisher is healthy.
@@ -355,7 +355,7 @@ class IMessagePublisher(ABC):
             True if healthy, False otherwise
         """
         pass
-    
+
     @abstractmethod
     async def close(self) -> None:
         """Close publisher connection."""
@@ -368,7 +368,7 @@ class IQueryProcessor(ABC):
     What changes: Query transformation logic, fuzzy matching implementation
     What must not change: Input/output contract
     """
-    
+
     @abstractmethod
     async def expand_query(
         self,
@@ -383,7 +383,7 @@ class IQueryProcessor(ABC):
             QueryExpansion with expanded queries
         """
         pass
-    
+
     @abstractmethod
     async def health_check(self) -> bool:
         """Check if query processor is healthy.
@@ -400,7 +400,7 @@ class IRateLimiter(ABC):
     What changes: Token bucket, sliding window, etc.
     What must not change: acquire() interface
     """
-    
+
     @abstractmethod
     async def acquire(self) -> None:
         """Acquire permission to make a request.
@@ -408,7 +408,7 @@ class IRateLimiter(ABC):
         Blocks if rate limit is exceeded.
         """
         pass
-    
+
     @abstractmethod
     async def get_delay(self) -> float:
         """Get the delay until next request is allowed.
@@ -417,7 +417,7 @@ class IRateLimiter(ABC):
             Delay in seconds (0 if available now)
         """
         pass
-    
+
     @abstractmethod
     async def reset(self) -> None:
         """Reset rate limiter state."""
@@ -429,12 +429,12 @@ class IArxivFetcher(ABC):
     
     Orchestrates all components for paper discovery.
     """
-    
+
     @abstractmethod
     async def run_discovery(
         self,
-        queries: List[str],
-        categories: Optional[List[str]] = None,
+        queries: list[str],
+        categories: list[str] | None = None,
     ) -> int:
         """Run paper discovery for queries and/or categories.
         
@@ -446,21 +446,21 @@ class IArxivFetcher(ABC):
             Number of papers discovered and published
         """
         pass
-    
+
     @abstractmethod
-    async def health_check(self) -> Dict[str, bool]:
+    async def health_check(self) -> dict[str, bool]:
         """Check health of all components.
         
         Returns:
             Dict mapping component name to health status
         """
         pass
-    
+
     @abstractmethod
     async def initialize(self) -> None:
         """Initialize all components."""
         pass
-    
+
     @abstractmethod
     async def close(self) -> None:
         """Clean up all resources."""

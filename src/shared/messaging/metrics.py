@@ -1,10 +1,9 @@
 """Metrics tracking for messaging operations."""
 import logging
-import time
 import threading
 from collections import defaultdict
-from typing import Any, Dict, List, Optional
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +20,10 @@ class MessagingMetrics:
     def __init__(self):
         """Initialize metrics storage."""
         self._lock = threading.Lock()
-        self._counters: Dict[str, int] = defaultdict(int)
-        self._timers: Dict[str, List[float]] = defaultdict(list)
-        self._gauges: Dict[str, float] = {}
-        self._errors: Dict[str, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+        self._counters: dict[str, int] = defaultdict(int)
+        self._timers: dict[str, list[float]] = defaultdict(list)
+        self._gauges: dict[str, float] = {}
+        self._errors: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     def increment(self, metric_name: str, value: int = 1) -> None:
         """Increment a counter metric.
@@ -142,7 +141,7 @@ class MessagingMetrics:
         with self._lock:
             return self._counters.get(metric_name, 0)
 
-    def get_gauge(self, metric_name: str) -> Optional[float]:
+    def get_gauge(self, metric_name: str) -> float | None:
         """Get current gauge value.
 
         Args:
@@ -154,7 +153,7 @@ class MessagingMetrics:
         with self._lock:
             return self._gauges.get(metric_name)
 
-    def get_timer_stats(self, metric_name: str) -> Dict[str, float]:
+    def get_timer_stats(self, metric_name: str) -> dict[str, float]:
         """Get statistics for a timer metric.
 
         Args:
@@ -179,7 +178,7 @@ class MessagingMetrics:
                 "p99": self._percentile(values, 99),
             }
 
-    def get_error_summary(self, queue: Optional[str] = None) -> Dict[str, Any]:
+    def get_error_summary(self, queue: str | None = None) -> dict[str, Any]:
         """Get error summary for queue or all queues.
 
         Args:
@@ -200,7 +199,7 @@ class MessagingMetrics:
                     summary[queue_name] = dict(errors)
                 return summary
 
-    def get_summary(self) -> Dict[str, Any]:
+    def get_summary(self) -> dict[str, Any]:
         """Get complete metrics summary.
 
         Returns:
@@ -234,10 +233,10 @@ class MessagingMetrics:
                 "gauges": dict(self._gauges),
                 "timers": timer_stats,
                 "errors": error_summary,
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
             }
 
-    def reset(self, metric_name: Optional[str] = None) -> None:
+    def reset(self, metric_name: str | None = None) -> None:
         """Reset metrics.
 
         Args:
@@ -260,7 +259,7 @@ class MessagingMetrics:
                 logger.info("All metrics reset")
 
     @staticmethod
-    def _percentile(values: List[float], p: int) -> float:
+    def _percentile(values: list[float], p: int) -> float:
         """Calculate percentile.
 
         Args:
@@ -296,7 +295,7 @@ class MessagingMetrics:
 
 
 # Global metrics instance
-_global_metrics: Optional[MessagingMetrics] = None
+_global_metrics: MessagingMetrics | None = None
 _metrics_lock = threading.Lock()
 
 
@@ -314,7 +313,7 @@ def get_metrics() -> MessagingMetrics:
     return _global_metrics
 
 
-def reset_metrics(metric_name: Optional[str] = None) -> None:
+def reset_metrics(metric_name: str | None = None) -> None:
     """Reset global metrics.
 
     Args:

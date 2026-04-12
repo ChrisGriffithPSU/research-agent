@@ -1,24 +1,20 @@
 """Batch operation helpers for SQLAlchemy repositories."""
 import logging
-from typing import Any, Dict, List, Optional, Type
+from typing import Any
 
-from sqlalchemy import insert, select
+from sqlalchemy import insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from src.shared.models.base import Base
-
 
 logger = logging.getLogger(__name__)
 
 
 class BatchInsertMixin:
     """Mixin for batch insert operations in repositories."""
-    
+
     async def batch_create(
         self,
-        items: List[Dict[str, Any]],
-    ) -> List[Any]:
+        items: list[dict[str, Any]],
+    ) -> list[Any]:
         """Batch insert multiple records efficiently.
         
         Args:
@@ -30,32 +26,32 @@ class BatchInsertMixin:
         if not items:
             logger.debug(f"{self._model_name}: Batch create empty")
             return []
-        
+
         model = self.model
         table = model.__table__
-        
+
         logger.debug(
             f"{self._model_name}: Batch creating {len(items)} items",
             extra={"batch_size": len(items), "table": table.name},
         )
-        
+
         try:
             # Create insert statement with returning
             stmt = insert(table).values(items).returning(table)
-            
+
             # Execute
             result = await self.session.execute(stmt)
-            
+
             # Get created objects
             created = result.scalars().all()
-            
+
             logger.info(
                 f"{self._model_name}: Batch created {len(created)} items",
                 extra={"created_count": len(created), "table": table.name},
             )
-            
+
             return list(created)
-        
+
         except Exception as e:
             await self.session.rollback()
             logger.error(
@@ -64,11 +60,11 @@ class BatchInsertMixin:
                 exc_info=True,
             )
             raise
-    
+
     async def batch_create_or_ignore(
         self,
-        items: List[Dict[str, Any]],
-        conflict_columns: Optional[List[str]] = None,
+        items: list[dict[str, Any]],
+        conflict_columns: list[str] | None = None,
     ) -> int:
         """Batch insert, ignore rows that violate unique constraints.
         
@@ -83,14 +79,14 @@ class BatchInsertMixin:
         if not items:
             logger.debug(f"{self._model_name}: Batch create-or-ignore empty")
             return 0
-        
+
         model = self.model
         table = model.__table__
-        
+
         # Determine conflict column
         if not conflict_columns:
             conflict_columns = [table.primary_key.columns[0].name]
-        
+
         logger.debug(
             f"{self._model_name}: Batch creating {len(items)} items (ignore conflicts)",
             extra={
@@ -99,7 +95,7 @@ class BatchInsertMixin:
                 "conflict_columns": conflict_columns,
             },
         )
-        
+
         try:
             # Create insert statement with ON CONFLICT DO NOTHING
             stmt = (
@@ -108,16 +104,16 @@ class BatchInsertMixin:
                 .on_conflict_do_nothing(constraint=conflict_columns[0])
                 .returning(table)
             )
-            
+
             # Execute
             result = await self.session.execute(stmt)
-            
+
             # Get inserted count
             inserted_count = len(result.scalars().all())
-            
+
             # Calculate how many were ignored
             ignored_count = len(items) - inserted_count
-            
+
             logger.info(
                 f"{self._model_name}: Batch inserted {inserted_count} items, {ignored_count} ignored",
                 extra={
@@ -126,9 +122,9 @@ class BatchInsertMixin:
                     "table": table.name,
                 },
             )
-            
+
             return inserted_count
-        
+
         except Exception as e:
             await self.session.rollback()
             logger.error(
@@ -146,13 +142,13 @@ class BatchInsertMixin:
 
 class BatchUpsertMixin:
     """Mixin for batch upsert operations in repositories."""
-    
+
     async def batch_upsert(
         self,
-        items: List[Dict[str, Any]],
-        conflict_columns: List[str],
-        update_columns: Optional[List[str]] = None,
-    ) -> List[Any]:
+        items: list[dict[str, Any]],
+        conflict_columns: list[str],
+        update_columns: list[str] | None = None,
+    ) -> list[Any]:
         """Batch upsert (insert or update on conflict).
         
         Args:
@@ -167,10 +163,10 @@ class BatchUpsertMixin:
         if not items:
             logger.debug(f"{self._model_name}: Batch upsert empty")
             return []
-        
+
         model = self.model
         table = model.__table__
-        
+
         # Determine update columns
         if update_columns is None:
             # Update all columns except conflict columns
@@ -178,7 +174,7 @@ class BatchUpsertMixin:
                 col.name for col in table.columns
                 if col.name not in conflict_columns
             ]
-        
+
         logger.debug(
             f"{self._model_name}: Batch upserting {len(items)} items",
             extra={
@@ -188,11 +184,11 @@ class BatchUpsertMixin:
                 "update_columns": update_columns,
             },
         )
-        
+
         try:
             # Create update dict: "column = excluded(column)" to only update specified columns
             update_dict = {col: excluded(col) for col in update_columns}
-            
+
             # Create upsert statement
             stmt = (
                 pg_insert(table)
@@ -203,20 +199,20 @@ class BatchUpsertMixin:
                 )
                 .returning(table)
             )
-            
+
             # Execute
             result = await self.session.execute(stmt)
-            
+
             # Get upserted objects
             upserted = result.scalars().all()
-            
+
             logger.info(
                 f"{self._model_name}: Batch upserted {len(upserted)} items",
                 extra={"upserted_count": len(upserted), "table": table.name},
             )
-            
+
             return list(upserted)
-        
+
         except Exception as e:
             await self.session.rollback()
             logger.error(

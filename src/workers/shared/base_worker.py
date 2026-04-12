@@ -9,14 +9,12 @@ Provides common functionality for all workers including:
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, Type
+from typing import Any
 
 from pydantic import BaseModel
-
 from src.shared.messaging.consumer import MessageConsumer
 from src.shared.messaging.publisher import MessagePublisher
 from src.shared.storage.artifact_store import LocalArtifactStore
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ class WorkerConfig(BaseModel):
     """Base configuration for workers."""
 
     queue_name: str
-    dlq_name: Optional[str] = None
+    dlq_name: str | None = None
     max_retries: int = 3
     retry_delay_seconds: float = 1.0
 
@@ -53,7 +51,7 @@ class BaseWorker(ABC):
         config: WorkerConfig,
         message_consumer: MessageConsumer,
         message_publisher: MessagePublisher,
-        artifact_store: Optional[LocalArtifactStore] = None,
+        artifact_store: LocalArtifactStore | None = None,
     ):
         """Initialize base worker.
 
@@ -81,7 +79,7 @@ class BaseWorker(ABC):
         pass
 
     @abstractmethod
-    def get_message_type(self) -> Type[BaseModel]:
+    def get_message_type(self) -> type[BaseModel]:
         """Get the expected message type.
 
         Returns:
@@ -146,7 +144,7 @@ class BaseWorker(ABC):
         self,
         key: str,
         data: bytes,
-        content_type: Optional[str] = None,
+        content_type: str | None = None,
     ) -> str:
         """Store an artifact.
 

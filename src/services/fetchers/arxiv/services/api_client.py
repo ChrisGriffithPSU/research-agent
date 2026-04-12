@@ -2,22 +2,21 @@
 
 Uses injectable HTTP client and rate limiter for testability.
 """
-import xml.etree.ElementTree as ET
-from typing import List, Optional, Dict, Any
-import httpx
 import logging
+import xml.etree.ElementTree as ET
 from datetime import datetime
+from typing import Any
 
-from src.shared.interfaces import IHTTPClient, IRateLimiter
+import httpx
 from src.services.fetchers.arxiv.config import ArxivFetcherConfig
-from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, PaperSource
 from src.services.fetchers.arxiv.exceptions import (
+    APIResponseError,
+    APITimeoutError,
     ArxivAPIError,
     RateLimitError,
-    APITimeoutError,
-    APIResponseError,
 )
-
+from src.services.fetchers.arxiv.schemas.paper import PaperMetadata, PaperSource
+from src.shared.interfaces import IHTTPClient, IRateLimiter
 
 logger = logging.getLogger(__name__)
 
@@ -60,24 +59,24 @@ class ArxivAPIClient:
         cache: Optional cache backend
         config: Configuration
     """
-    
+
     BASE_URL = "http://export.arxiv.org/api/query"
-    
+
     # arXiv API sort options
     SORT_RELEVANCE = "relevance"
     SORT_LAST_UPDATED = "lastUpdatedDate"
     SORT_SUBMITTED = "submittedDate"
-    
+
     # Sort orders
     ORDER_DESCENDING = "descending"
     ORDER_ASCENDING = "ascending"
-    
+
     def __init__(
         self,
-        http_client: Optional[IHTTPClient] = None,
-        rate_limiter: Optional[IRateLimiter] = None,
-        cache: Optional[Any] = None,  # Optional cache backend
-        config: Optional[ArxivFetcherConfig] = None,
+        http_client: IHTTPClient | None = None,
+        rate_limiter: IRateLimiter | None = None,
+        cache: Any | None = None,  # Optional cache backend
+        config: ArxivFetcherConfig | None = None,
     ):
         """Initialize arXiv API client.
         
@@ -89,7 +88,7 @@ class ArxivAPIClient:
         """
         self.config = config or ArxivFetcherConfig()
         self.cache = cache
-        
+
         # Use injectable HTTP client, default to httpx
         if http_client is None:
             self._http_client = httpx.AsyncClient(
@@ -100,7 +99,7 @@ class ArxivAPIClient:
         else:
             self._http_client = http_client
             self._owns_http_client = False
-        
+
         # Use injectable rate limiter
         if rate_limiter is None:
             self._rate_limiter = DefaultRateLimiter(
@@ -110,40 +109,40 @@ class ArxivAPIClient:
         else:
             self._rate_limiter = rate_limiter
             self._owns_rate_limiter = False
-        
+
         # Statistics
         self._request_count = 0
         self._error_count = 0
         self._cache_hit_count = 0
-    
+
     async def initialize(self) -> None:
         """Initialize the client."""
         logger.info("ArxivAPIClient initialized")
-    
+
     async def close(self) -> None:
         """Close HTTP client."""
         if self._owns_http_client:
             await self._http_client.aclose()
         logger.info("ArxivAPIClient closed")
-    
+
     @property
     def http_client(self) -> IHTTPClient:
         """Get the HTTP client (for testing)."""
         return self._http_client
-    
+
     @property
     def rate_limiter(self) -> IRateLimiter:
         """Get the rate limiter (for testing)."""
         return self._rate_limiter
-    
+
     async def search(
         self,
         query: str,
-        max_results: Optional[int] = None,
+        max_results: int | None = None,
         start_index: int = 0,
         sort_by: str = "relevance",
         sort_order: str = "descending",
-    ) -> List[PaperMetadata]:
+    ) -> list[PaperMetadata]:
         """Execute search query against arXiv API.
         
         Args:
@@ -160,7 +159,7 @@ class ArxivAPIClient:
             ArxivAPIError: If API request fails
         """
         max_results = max_results or self.config.default_results_per_query
-        
+
         # Check cache first
         if self.cache:
             cache_key_params = {
@@ -174,10 +173,10 @@ class ArxivAPIClient:
                 self._cache_hit_count += 1
                 logger.debug(f"Cache hit for query: {query[:50]}...")
                 return self._parse_cached_response(cached)
-        
+
         # Apply rate limiting
         await self._rate_limiter.acquire()
-        
+
         # Build URL
         url = self._build_search_url(
             query=query,
@@ -186,16 +185,16 @@ class ArxivAPIClient:
             sort_by=sort_by,
             sort_order=sort_order,
         )
-        
+
         try:
             logger.debug(f"Executing arXiv search: {query[:50]}...")
             response = await self._http_client.get(url)
             response.raise_for_status()
             self._request_count += 1
-            
+
             # Parse XML response
             papers = self._parse_atom_response(response.text, source_query=query)
-            
+
             # Cache the response
             if self.cache:
                 cache_data = {
@@ -208,10 +207,10 @@ class ArxivAPIClient:
                     "fetched_at": datetime.utcnow().isoformat(),
                 }
                 await self.cache.set_api_response(query, **cache_key_params, response=cache_data)
-            
+
             logger.info(f"Found {len(papers)} papers for query: {query[:50]}...")
             return papers
-            
+
         except httpx.HTTPStatusError as e:
             self._error_count += 1
             if e.response.status_code == 429:
@@ -238,13 +237,13 @@ class ArxivAPIClient:
                 f"Failed to connect to arXiv API: {e}",
                 original=e,
             )
-    
+
     async def fetch_by_categories(
         self,
-        categories: List[str],
+        categories: list[str],
         max_per_category: int = 50,
-        days_back: Optional[int] = None,
-    ) -> List[PaperMetadata]:
+        days_back: int | None = None,
+    ) -> list[PaperMetadata]:
         """Fetch recent papers from specified categories.
         
         Args:
@@ -256,40 +255,40 @@ class ArxivAPIClient:
             List of PaperMetadata from categories
         """
         all_papers = []
-        
+
         for category in categories:
             # Build category query
             query = f"cat:{category}"
-            
+
             if days_back:
                 from datetime import datetime, timedelta
                 date_from = datetime.utcnow() - timedelta(days=days_back)
                 date_str = date_from.strftime("%Y%m%d")
                 query = f"cat:{category} AND submittedDate:[{date_str} TO 99991231]"
-            
+
             papers = await self.search(
                 query=query,
                 max_results=max_per_category,
                 sort_by=self.SORT_SUBMITTED,
                 sort_order=self.ORDER_DESCENDING,
             )
-            
+
             # Mark source as category
             for paper in papers:
                 paper.source = PaperSource.CATEGORY
                 paper.source_query = category
-            
+
             all_papers.extend(papers)
-        
+
         logger.info(
             f"Fetched {len(all_papers)} papers from {len(categories)} categories"
         )
         return all_papers
-    
+
     async def fetch_by_ids(
         self,
-        paper_ids: List[str],
-    ) -> List[PaperMetadata]:
+        paper_ids: list[str],
+    ) -> list[PaperMetadata]:
         """Fetch specific papers by arXiv IDs.
         
         Args:
@@ -300,24 +299,24 @@ class ArxivAPIClient:
         """
         if not paper_ids:
             return []
-        
+
         # arXiv API limits to 2000 IDs per query
         batch_size = 100
         all_papers = []
-        
+
         for i in range(0, len(paper_ids), batch_size):
             batch = paper_ids[i:i + batch_size]
             id_query = " OR ".join(f"id:{pid}" for pid in batch)
-            
+
             papers = await self.search(
                 query=id_query,
                 max_results=len(batch),
             )
-            
+
             all_papers.extend(papers)
-        
+
         return all_papers
-    
+
     def _build_search_url(
         self,
         query: str,
@@ -334,27 +333,27 @@ class ArxivAPIClient:
             "sortBy": sort_by,
             "sortOrder": sort_order,
         }
-        
+
         param_str = "&".join(f"{k}={v}" for k, v in params.items())
         return f"{self.BASE_URL}?{param_str}"
-    
+
     def _parse_atom_response(
         self,
         xml_content: str,
         source_query: str = "",
-    ) -> List[PaperMetadata]:
+    ) -> list[PaperMetadata]:
         """Parse ATOM response from arXiv API."""
         papers = []
-        
+
         try:
             root = ET.fromstring(xml_content)
-            
+
             # Define namespaces
             ns = {
                 "atom": "http://www.w3.org/2005/Atom",
                 "arxiv": "http://arxiv.org/schemas/atom",
             }
-            
+
             # Parse entries
             for entry in root.findall("atom:entry", ns):
                 try:
@@ -364,28 +363,28 @@ class ArxivAPIClient:
                 except Exception as e:
                     logger.warning(f"Failed to parse entry: {e}")
                     continue
-            
+
         except ET.ParseError as e:
             raise APIResponseError(
                 message=f"Failed to parse arXiv response: {e}",
                 response_text=xml_content[:500],
                 original=e,
             )
-        
+
         return papers
-    
+
     def _parse_entry(
         self,
         entry: ET.Element,
-        ns: Dict[str, str],
+        ns: dict[str, str],
         source_query: str,
-    ) -> Optional[PaperMetadata]:
+    ) -> PaperMetadata | None:
         """Parse a single ATOM entry."""
         try:
             # Extract ID
             id_elem = entry.find("atom:id", ns)
             arxiv_id_raw = id_elem.text if id_elem is not None else ""
-            
+
             # Parse paper ID and version
             arxiv_id = ""
             version = "v1"
@@ -396,24 +395,24 @@ class ArxivAPIClient:
                     version = f"v{parts.split('v')[1]}"
                 else:
                     arxiv_id = parts
-            
+
             # Extract title
             title_elem = entry.find("atom:title", ns)
             title = title_elem.text if title_elem is not None else ""
             title = " ".join(title.strip().split())
-            
+
             # Extract abstract
             summary_elem = entry.find("atom:summary", ns)
             abstract = summary_elem.text if summary_elem is not None else ""
             abstract = " ".join(abstract.strip().split())
-            
+
             # Extract authors
             authors = []
             for author in entry.findall("atom:author", ns):
                 name_elem = author.find("atom:name", ns)
                 if name_elem is not None and name_elem.text:
                     authors.append(name_elem.text)
-            
+
             # Extract categories
             categories = []
             subcategories = []
@@ -425,18 +424,18 @@ class ArxivAPIClient:
                         parts = cat_term.split(".")
                         if len(parts) >= 1:
                             subcategories.append(parts[0])
-            
+
             # Extract dates
             published_elem = entry.find("atom:published", ns)
             submitted_date = ""
             if published_elem is not None and published_elem.text:
                 submitted_date = published_elem.text[:10]
-            
+
             updated_elem = entry.find("atom:updated", ns)
             updated_date = None
             if updated_elem is not None and updated_elem.text:
                 updated_date = updated_elem.text[:10]
-            
+
             # Extract links
             pdf_url = ""
             arxiv_url = ""
@@ -449,19 +448,19 @@ class ArxivAPIClient:
                     pdf_url = href
                 elif href.endswith(".pdf"):
                     pdf_url = href
-            
+
             # Extract DOI
             doi_elem = entry.find("arxiv:doi", ns)
             doi = doi_elem.text if doi_elem is not None else None
-            
+
             # Extract journal ref
             journal_elem = entry.find("arxiv:journal_ref", ns)
             journal_ref = journal_elem.text if journal_elem is not None else None
-            
+
             # Extract comments
             comment_elem = entry.find("arxiv:comment", ns)
             comments = comment_elem.text if comment_elem is not None else None
-            
+
             return PaperMetadata(
                 paper_id=arxiv_id,
                 version=version,
@@ -479,12 +478,12 @@ class ArxivAPIClient:
                 arxiv_url=arxiv_url,
                 source_query=source_query,
             )
-            
+
         except Exception as e:
             logger.warning(f"Failed to parse entry: {e}")
             return None
-    
-    def _parse_cached_response(self, cached_data: Dict[str, Any]) -> List[PaperMetadata]:
+
+    def _parse_cached_response(self, cached_data: dict[str, Any]) -> list[PaperMetadata]:
         """Parse cached response data."""
         papers = []
         for paper_data in cached_data.get("papers", []):
@@ -493,7 +492,7 @@ class ArxivAPIClient:
             except Exception as e:
                 logger.warning(f"Failed to parse cached paper: {e}")
         return papers
-    
+
     async def health_check(self) -> bool:
         """Check if arXiv API is accessible."""
         try:
@@ -505,8 +504,8 @@ class ArxivAPIClient:
         except Exception as e:
             logger.warning(f"arXiv API health check failed: {e}")
             return False
-    
-    def get_stats(self) -> Dict[str, Any]:
+
+    def get_stats(self) -> dict[str, Any]:
         """Get client statistics."""
         return {
             "request_count": self._request_count,
@@ -517,7 +516,7 @@ class ArxivAPIClient:
                 if self._request_count > 0 else 0
             ),
         }
-    
+
     def __repr__(self) -> str:
         return (
             f"ArxivAPIClient("
@@ -529,53 +528,53 @@ class ArxivAPIClient:
 
 class DefaultRateLimiter:
     """Simple rate limiter implementation for when no external one is available."""
-    
+
     def __init__(self, rate: float = 0.333):
         import asyncio
         import time
-        
+
         self.rate = rate
         self.capacity = 1
         self.tokens = self.capacity
         self.last_update = time.monotonic()
         self._lock = asyncio.Lock()
-    
+
     async def acquire(self) -> None:
         """Acquire permission to make a request."""
         async with self._lock:
             import time
             now = time.monotonic()
             elapsed = now - self.last_update
-            
+
             self.tokens = min(
                 self.capacity,
                 self.tokens + elapsed * self.rate
             )
             self.last_update = now
-            
+
             if self.tokens >= 1:
                 self.tokens -= 1
                 return
-            
+
             wait_time = (1 - self.tokens) / self.rate
-        
+
         import asyncio
         await asyncio.sleep(wait_time)
-    
+
     async def get_delay(self) -> float:
         """Get delay until next request."""
         async with self._lock:
             import time
             now = time.monotonic()
             elapsed = now - self.last_update
-            
+
             self.tokens = min(
                 self.capacity,
                 self.tokens + elapsed * self.rate
             )
             self.last_update = now
-            
+
             if self.tokens >= 1:
                 return 0.0
-            
+
             return (1 - self.tokens) / self.rate
