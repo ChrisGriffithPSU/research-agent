@@ -2,6 +2,11 @@
 
 Supports any OpenAI-compatible API endpoint with configurable
 base URL, API key, and model name via environment variables.
+
+Supports the OpenAI Chat Completions API response_format spec:
+- {"type": "json_object"} — model outputs JSON, no schema enforcement
+- {"type": "json_schema", "json_schema": {...}} — model outputs JSON matching
+  a specific JSON Schema (structured outputs). Provider must support this.
 """
 
 import json
@@ -10,6 +15,8 @@ import re
 import time
 from abc import abstractmethod
 from typing import Any, Protocol
+
+from pydantic import BaseModel, ValidationError
 
 from src.shared.exceptions.llm import LLMError, LLMProviderError
 
@@ -50,6 +57,7 @@ class ILLMClient(Protocol):
         messages: list[dict[str, Any]] | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        response_format: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Generate completion from LLM."""
@@ -165,7 +173,7 @@ class OpenAIClient:
         messages: list[dict[str, Any]] | None = None,
         temperature: float = 0.7,
         max_tokens: int | None = None,
-        response_format: dict[str, str] | None = None,
+        response_format: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Generate completion from LLM.
@@ -178,10 +186,14 @@ class OpenAIClient:
                 a previous response for continued reasoning.
             temperature: Sampling temperature (0-1)
             max_tokens: Maximum tokens to generate
-            response_format: JSON schema for structured output
+            response_format: Controls output format per the OpenAI API spec:
+                - {"type": "json_object"}: model outputs valid JSON (no schema)
+                - {"type": "json_schema", "json_schema": {...}}: model outputs
+                  JSON matching the given schema (structured outputs).
+                  Provider must support this feature.
             **kwargs: Additional API-specific arguments.
                 Pass extra_body={"reasoning": {"enabled": True}} to enable
-                reasoning mode (e.g., for OpenRouter's free reasoning model).
+                reasoning mode (provider-specific).
 
         Returns:
             LLMResponse with generated content
@@ -298,6 +310,90 @@ class OpenAIClient:
             return True
         except Exception:
             return False
+
+    async def complete_structured(
+        self,
+        model_class: type[BaseModel],
+        prompt: str | None = None,
+        system: str | None = None,
+        messages: list[dict[str, Any]] | None = None,
+        temperature: float = 0.4,
+        max_tokens: int | None = None,
+        **kwargs: Any,
+    ) -> tuple[BaseModel, LLMResponse]:
+        """Call the LLM and return a validated Pydantic model instance.
+
+        Uses the OpenAI API's ``json_schema`` structured output mode to
+        enforce the schema at the API level.  Falls back to
+        ``json_object`` mode + manual Pydantic validation if the provider
+        returns an error for ``json_schema`` (i.e. the provider doesn't
+        support structured outputs).
+
+        Args:
+            model_class: A Pydantic BaseModel subclass describing the
+                expected response shape.  The JSON schema is generated
+                automatically via ``model_class.model_json_schema()``.
+            prompt: User prompt (mutually exclusive with messages).
+            system: System prompt.
+            messages: Full message list for multi-turn.
+            temperature: Sampling temperature (default 0.4 for structured output).
+            max_tokens: Maximum tokens to generate.
+            **kwargs: Passed through to ``complete()`` (e.g. extra_body).
+
+        Returns:
+            A tuple of (validated Pydantic model instance, raw LLMResponse).
+
+        Raises:
+            LLMProviderError: If the API call fails.
+            LLMError: If the response can't be parsed into the model.
+        """
+        json_schema = model_class.model_json_schema()
+
+        # Try json_schema mode first (schema enforcement at the API level)
+        response_format: dict[str, Any] = {
+            "type": "json_schema",
+            "json_schema": {
+                "name": model_class.__name__,
+                "strict": True,
+                "schema": json_schema,
+            },
+        }
+
+        try:
+            response = await self.complete(
+                prompt=prompt,
+                system=system,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format=response_format,
+                **kwargs,
+            )
+        except LLMProviderError:
+            # Provider doesn't support json_schema mode — fall back to
+            # json_object + manual validation.
+            response = await self.complete(
+                prompt=prompt,
+                system=system,
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                response_format={"type": "json_object"},
+                **kwargs,
+            )
+
+        # Parse and validate
+        try:
+            raw = json.loads(response.content)
+        except json.JSONDecodeError as e:
+            raise LLMError(f"LLM returned invalid JSON for {model_class.__name__}: {e}") from e
+
+        try:
+            instance = model_class.model_validate(raw)
+        except ValidationError as e:
+            raise LLMError(f"LLM response failed {model_class.__name__} validation: {e}") from e
+
+        return instance, response
 
     def get_model_info(self) -> dict[str, Any]:
         """Get information about the configured model.
