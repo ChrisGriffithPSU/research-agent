@@ -4,37 +4,40 @@ Hardcoded categories with configurable fetch parameters.
 No LLM-based query expansion - simple category-based fetching.
 """
 
-
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Hardcoded ArXiv categories for MFT quant research
 # Focused on ML, stats, quant finance, and mathematical modeling
 HARDCODED_CATEGORIES: list[str] = [
+    # Quantitative Finance (directly relevant)
+    "q-fin.TR",  # Trading and Market Microstructure
+    "q-fin.ST",  # Statistical Finance
+    "q-fin.CP",  # Computational Finance
+    "q-fin.PM",  # Portfolio Management
+    "q-fin.RM",  # Risk Management
+    "q-fin.GN",  # General Finance
     # Machine Learning & Artificial Intelligence
     "cs.LG",  # Machine Learning
     "cs.AI",  # Artificial Intelligence
-    "cs.CL",  # Computation and Language (useful for sequence modeling ideas)
-    "cs.CV",  # Computer Vision (occasionally useful for pattern extraction methods)
+    "cs.CL",  # Computation and Language (sequence modeling ideas)
+    "cs.CV",  # Computer Vision (pattern extraction methods)
     "cs.NE",  # Neural and Evolutionary Computing
     "cs.RO",  # Robotics (control & state estimation ideas)
     "cs.SY",  # Systems and Control
     "cs.MA",  # Multiagent Systems
     "cs.IT",  # Information Theory (CS)
+    "cs.SI",  # Social and Information Networks
+    "cs.DS",  # Data Structures and Algorithms (graph methods)
+    "cs.PF",  # Performance (queueing analogies)
     # Statistics & Statistical Learning
     "stat.ML",  # Machine Learning (Statistics)
     "stat.TH",  # Statistics Theory
     "stat.ME",  # Methodology
     "stat.CO",  # Computational Statistics
+    "stat.AP",  # Applications
     "math.ST",  # Statistics (Mathematics)
     "math.PR",  # Probability Theory
-    # Quantitative Finance (directly relevant)
-    "q-fin.TR",  # Trading and Market Microstructure
-    "q-fin.CP",  # Computational Finance
-    "q-fin.ST",  # Statistical Finance
-    "q-fin.PM",  # Portfolio Management
-    "q-fin.RM",  # Risk Management
-    "q-fin.GN",  # General Finance
     # Optimization, Control & Decision Systems
     "math.OC",  # Optimization and Control
     "math.CT",  # Control Theory
@@ -50,24 +53,34 @@ HARDCODED_CATEGORIES: list[str] = [
     # Statistical Physics & Complex Systems
     "cond-mat.stat-mech",  # Statistical Mechanics
     "cond-mat.dis-nn",  # Disordered Systems and Neural Networks
+    "cond-mat.soft",  # Soft Condensed Matter
+    "cond-mat.mtrl-sci",  # Materials Science (fracture/stress analogies)
+    # Physics & Geophysics (cascade/regime analogies)
     "physics.soc-ph",  # Physics of Society (complex systems, networks)
     "physics.data-an",  # Data Analysis, Statistics and Probability
-    # Fluid Dynamics & Turbulence (useful for cascade/regime analogies)
     "physics.flu-dyn",  # Fluid Dynamics
-    # Networks, Traffic & Queueing Analogies
-    "physics.soc-ph",  # Complex social/network systems
-    "cs.NI",  # Networking and Internet Architecture
-    "cs.DC",  # Distributed, Parallel, and Cluster Computing
+    "physics.geo-ph",  # Geophysics (earthquake/rupture analogies)
     # Information Theory & Signal Models
     "math.IT",  # Information Theory
-    "cs.IT",  # Information Theory (CS)
-    # Applied Probability & Queueing-Relevant Fields
-    "math.PR",  # Probability Theory
-    "stat.TH",  # Statistical Theory
     # Computational & Numerical Methods
     "cs.NA",  # Numerical Analysis
     "math.NA",  # Numerical Analysis
     "cs.MS",  # Mathematical Software
+    # Geometry & Topology (manifold/TDA)
+    "math.MG",  # Metric Geometry
+    "math.AT",  # Algebraic Topology
+    # Economics (game theory, econometrics)
+    "econ.GN",  # General Economics
+    "econ.TH",  # Theoretical Economics
+    "econ.EM",  # Econometrics
+    # Quantitative Biology (neuro/eco/epidemic analogies)
+    "q-bio.NC",  # Neurons and Cognition (spike-train analogies)
+    "q-bio.QM",  # Quantitative Methods
+    "q-bio.PE",  # Populations and Evolution (ecology/contagion)
+    "q-bio.OT",  # Other Quantitative Biology (contagion models)
+    # Networking & Distributed Systems (queueing analogies)
+    "cs.NI",  # Networking and Internet Architecture
+    "cs.DC",  # Distributed, Parallel, and Cluster Computing
 ]
 
 
